@@ -1,2 +1,1 @@
-# Linus-Salamander-enclave
-Zero-copy post-quantum snapshots secretas enclave
+![Linus Salamander Enclave System](https://i.imgur.com/TpNKi78.jpeg)
