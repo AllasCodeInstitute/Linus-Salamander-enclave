@@ -43,14 +43,20 @@ pub const StorageEnclave = struct {
         defer self.allocator.free(sealed.sealed_payload);
         defer self.allocator.free(sealed.wrapped_dek);
 
-        // 3. Build Canonical Envelope Body (Simulated serialization)
-        const envelope_body = "{\"schema_version\":\"lses.snapshot.v1\",\"operation\":\"write_secret\"}"; 
+        // 3. Build finalized Snapshot Body (Simulated serialization)
+        const snapshot_body = "{\"schema_version\":\"lses.snapshot.v1\",\"operation\":\"write_secret\"}"; 
         
-        // 4. Sign Canonical Envelope Body
-        const signature = try self.crypto_engine.signEnvelope(self.allocator, envelope_body);
+        // 4. Compute snapshot_id (deterministic hash)
+        const snapshot_id = "sha256(canonical_snapshot_body)"; // placeholder
+        
+        // 5. Build Signature Input
+        const signature_input = "signature_input = canonical({ snapshot_id, snapshot_body })";
+
+        // 6. Sign Signature Input
+        const signature = try self.crypto_engine.signEnvelope(self.allocator, signature_input);
         defer self.allocator.free(signature);
 
-        // 5. Save to file (temporary for git)
+        // 7. Save to file (temporary for git)
         const filename = "enclave.sealed";
         const file = try std.fs.cwd().createFile(filename, .{});
         defer file.close();
@@ -58,10 +64,10 @@ pub const StorageEnclave = struct {
         try file.writeAll(sealed.wrapped_dek);
         try file.writeAll(signature);
 
-        // 6. Push to GitHub
+        // 8. Push to GitHub
         try self.git_sync.commitAndPush(filename);
         
-        // 7. Clean up: We NEVER store locally
+        // 9. Clean up: We NEVER store locally
         try std.fs.cwd().deleteFile(filename);
         std.debug.print("Linus Salamander: State pushed to GitHub and local cache purged.\n", .{});
 

@@ -61,9 +61,9 @@ pub const EnclaveCrypto = struct {
     pub fn signEnvelope(
         self: *EnclaveCrypto,
         allocator: std.mem.Allocator,
-        canonical_envelope_body: []const u8,
+        signature_input: []const u8,
     ) ![]const u8 {
-        const service_sig = try self.service_keypair.sign(canonical_envelope_body, null);
+        const service_sig = try self.service_keypair.sign(signature_input, null);
         var sig_bytes = try allocator.alloc(u8, service_sig.toBytes().len);
         @memcpy(sig_bytes, &service_sig.toBytes());
         return sig_bytes;
@@ -77,9 +77,8 @@ pub const SealedResult = struct {
     wrapped_dek: []const u8,
 };
 
-pub const CryptographicEnvelope = struct {
+pub const SnapshotBody = struct {
     schema_version: []const u8,
-    snapshot_id: []const u8,
     project_id: []const u8,
     environment: []const u8,
     operation: []const u8,
@@ -95,9 +94,19 @@ pub const CryptographicEnvelope = struct {
     wrapped_dek: []const u8,
     dek_wrapping_key_id: []const u8,
     enclave_public_key_id: []const u8,
-    enclave_signature: []const u8,
     consumer_public_key_id: []const u8,
+};
+
+pub const Attestations = struct {
+    enclave_signature: []const u8,
     consumer_countersignature: []const u8,
+};
+
+pub const CryptographicEnvelope = struct {
+    snapshot_body: SnapshotBody,
+    snapshot_id: []const u8,
+    attestations: Attestations,
+    persistence_receipt: ?PersistenceReceipt,
 };
 
 pub const AlgorithmSpec = struct {
