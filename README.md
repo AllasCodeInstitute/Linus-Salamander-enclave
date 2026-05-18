@@ -304,14 +304,23 @@ The internal event system uses a unified naming convention to track the lifecycl
 ### 9.2 Read Secret Flow
 1. Receive `SecretReadRequest`.
 2. Validate consumer identity and access policy.
-3. Fetch the latest snapshot envelope from GitHub.
-4. Validate the Enclave's Ed25519 signature and Consumer's countersignature.
-5. Validate the `previous_snapshot_hash` against the local chain head.
-6. Validate the `epoch` strictly exceeds the last accepted epoch.
-7. Unwrap the `wrapped_dek` strictly within the Enclave boundary.
-8. Unseal the payload into `EnclaveMemoryStore` using the DEK.
-9. Return a `RuntimeSecretHandle` by default. (Plaintext export requires explicit policy authorization).
-10. Automatically purge the plaintext DEK and sensitive material from memory after the handle expires or is consumed.
+3. Fetch the latest snapshot structure from GitHub.
+4. Canonicalize `snapshot_body`.
+5. Recompute `snapshot_id = sha256(canonical_snapshot_body)`.
+6. Compare recomputed `snapshot_id` with stored `snapshot_id`.
+7. Compute `signature_input = canonical({ snapshot_id, snapshot_body })`.
+8. Verify Enclave signature and Consumer countersignature over the same `signature_input`.
+9. Validate `previous_snapshot_hash` against the local chain head.
+10. Validate `epoch > last_accepted_epoch`.
+11. Unwrap `wrapped_dek` strictly within the Enclave boundary.
+12. Verify AES-GCM auth tag and unseal the payload into `EnclaveMemoryStore`.
+13. Return `RuntimeSecretHandle` by default.
+14. Purge plaintext DEK and sensitive material after the handle expires or is consumed.
+
+**Note:**
+- Hash and signature validation happens before DEK unwrap whenever possible.
+- DEK unwrap and AES-GCM decryption happen only after structural, hash, signature, chain, and policy checks pass.
+- Plaintext export requires explicit policy authorization.
 
 ### 9.3 Rotate Secret Flow
 1. Receive `SecretRotateRequest`.
@@ -337,14 +346,19 @@ The internal event system uses a unified naming convention to track the lifecycl
 
 ### 9.4 Recovery Flow
 To recover state from the remote repository (e.g., upon system restart):
-1. Fetch the latest sequence of snapshots from GitHub.
-2. Validate the chain recursively using `previous_snapshot_hash`.
-3. Verify the chain against the trust anchor.
-4. If no trusted chain head exists, enter recovery-limited mode (mitigated trust).
-5. Discard any snapshot with an invalid signature, auth tag, or incorrect hash.
-6. Detect and reject rollback attempts by verifying `epoch` continuity.
-7. Restore the verified state *only* into runtime memory.
-8. Never materialize plaintext to disk during the recovery process.
+1. Fetch the latest sequence of snapshot structures from GitHub.
+2. For each snapshot, canonicalize `snapshot_body`.
+3. Recompute `snapshot_id = sha256(canonical_snapshot_body)`.
+4. Verify attestations over `signature_input = canonical({ snapshot_id, snapshot_body })`.
+5. Validate the chain continuously recursively using `previous_snapshot_hash`.
+6. Validate the chain against the trust anchor.
+7. If no trusted chain head exists, enter recovery-limited mode (mitigated trust).
+8. Only after all hash, attestation, and chain validations pass, unwrap DEK and decrypt the payload if needed to restore state.
+9. Detect and reject rollback attempts by verifying `epoch` continuity.
+10. Restore the verified state *only* into runtime memory.
+11. Never materialize plaintext to disk during the recovery process.
+
+Recovery must validate `{ snapshot_body, snapshot_id, attestations }` without depending on `commit_sha` or any `persistence_receipt`.
 
 ## 10. Chain Head Trust Anchor
 Rollback protection is only strong if the system possesses a reliable anchor to compare the remote state against. 
@@ -394,12 +408,12 @@ Explicação do contrato de identidade:
 ## 12. Security Invariants
 - **Invariant LSES-001 — No Local Plaintext Persistence:** No plaintext secret may be intentionally written to local disk at any point in the lifecycle.
 - **Invariant LSES-002 — Persisted State Must Be Sealed:** Every persisted snapshot must contain an encrypted payload, authenticated metadata, enclave signature, and consumer countersignature.
-- **Invariant LSES-003 — Dual Attestation Required:** A snapshot is invalid unless both the Enclave Service and Consuming System signatures verify against the canonical envelope.
+- **Invariant LSES-003 — Dual Attestation Required:** A snapshot is invalid unless both the Enclave Service and Consuming System signatures verify against the same `signature_input = canonical({ snapshot_id, snapshot_body })`.
 - **Invariant LSES-004 — Monotonic Epoch:** A snapshot with an epoch lower than or equal to the last accepted epoch must be rejected.
 - **Invariant LSES-005 — Chain Continuity:** A snapshot must reference the currently trusted previous snapshot hash.
 - **Invariant LSES-006 — Purge After Persistence:** After a successful write, temporary local artifacts must be queued for deletion (best-effort secure overwrite).
 - **Invariant LSES-007 — No GitHub Trust Assumption:** GitHub must never be required to preserve confidentiality or semantic validity.
-- **Invariant LSES-008 — Canonical Signature Input:** All signed data must be canonicalized before signing.
+- **Invariant LSES-008 — Canonical Signature Input:** All signed data must be represented as `signature_input = canonical({ snapshot_id, snapshot_body })` before Enclave signature and Consumer countersignature.
 - **Invariant LSES-009 — Runtime Exposure Bound:** Plaintext secret material may exist only inside an authorized runtime operation window.
 - **Invariant LSES-010 — Refuse on Verification Failure:** Any failure in signature, hash, epoch, schema, or policy validation must immediately refute the operation and purge memory.
 - **Invariant LSES-011 — Wrapped DEK Required:** Every persisted encrypted snapshot must include a wrapped DEK or equivalent recoverable key reference. Plaintext DEK must never be persisted.
@@ -447,14 +461,22 @@ Explicação do contrato de identidade:
 ## 14. GitHub Persistence Contract
 GitHub is treated strictly as an untrusted blob store for cryptographic envelopes and persistence receipts.
 
-**GitHub may store:**
-- The sealed snapshot envelope.
-- Public metadata and schema version.
-- Key identifiers (public keys and KEK IDs).
-- The AES-GCM encrypted payload.
-- The `wrapped_dek`.
-- Ed25519 signatures.
-- Git commit metadata (as a persistence receipt).
+**GitHub may store the final structure:**
+```text
+{
+  snapshot_body,
+  snapshot_id,
+  attestations,
+  persistence_receipt
+}
+```
+
+* `snapshot_body` contém o conteúdo criptográfico selado.
+* `snapshot_id` identifica deterministicamente o snapshot.
+* `attestations` provam aceite criptográfico do Enclave e do Consumer.
+* `persistence_receipt` registra onde o snapshot foi armazenado.
+* GitHub continua sendo não confiável.
+* A verificação criptográfica do snapshot não depende do GitHub ou do `commit_sha`.
 
 **GitHub must never store:**
 - Plaintext secrets.
@@ -538,10 +560,13 @@ The Secret Plane validates invariants and emits semantic events before any state
 LSES requires a rigorous testing methodology.
 
 ### Unit Tests
-### Unit Tests
 - `snapshot_id` does not include itself.
 - `snapshot_id` does not include attestations.
 - `snapshot_id` does not include `persistence_receipt`.
+- Read flow recomputes `snapshot_id` before signature verification.
+- Signature verification uses `signature_input = canonical({ snapshot_id, snapshot_body })`.
+- `commit_sha` is never required to verify cryptographic identity.
+- Terminology is consistent: no implementation test refers to `commit_sha` as snapshot identity.
 - Enclave and Consumer signatures use identical `signature_input`.
 - Mutating `snapshot_body` invalidates `snapshot_id`.
 - Mutating `snapshot_id` invalidates signatures.
@@ -564,9 +589,11 @@ LSES requires a rigorous testing methodology.
 - `readSecret` returns a handle by default.
 
 ### Integration Tests
+- Read flow rejects a snapshot when stored `snapshot_id` differs from recomputed `snapshot_id`.
+- Recovery verifies `{ snapshot_body, snapshot_id, attestations }` without depending on `persistence_receipt`.
+- GitHub adapter stores `{ snapshot_body, snapshot_id, attestations, persistence_receipt }`.
 - Write flow computes `snapshot_id` before signatures and before GitHub persistence.
 - Rotate flow uses the same snapshot identity rules as write flow.
-- Recovery verifies `{ snapshot_body, snapshot_id, attestations }` without requiring `commit_sha`.
 - Replaying an old valid envelope emits `Secret.replay.detected`.
 - The `writeSecret` flow properly encrypts the envelope and pushes it via the GitHub adapter, persisting only `sealed_payload` and `wrapped_dek`.
 - The `readSecret` flow unwraps DEK only inside the runtime boundary, validates, and decrypts the latest remote snapshot.
@@ -574,10 +601,10 @@ LSES requires a rigorous testing methodology.
 - Rollback attempts with an internally consistent old chain are detected when the chain head exists.
 
 ### Property-Based Tests
+- Any mutation to `snapshot_body` changes recomputed `snapshot_id`.
+- Any mutation to `attestations` does not change `snapshot_id` but causes signature verification failure.
+- Any mutation to `persistence_receipt` does not change `snapshot_id`.
 - No generated snapshot hash includes `snapshot_id` in its own preimage.
-- Any mutation to `snapshot_body` changes `snapshot_id`.
-- Any mutation to `snapshot_id` invalidates both signatures.
-- Any mutation to `persistence_receipt` leaves `snapshot_id` unchanged.
 - Any mutation to signed security-critical fields invalidates both signatures.
 - Any mutation to AAD invalidates AES-GCM authentication.
 - Same DEK/context must never accept reused nonce.
@@ -602,8 +629,12 @@ LSES requires a rigorous testing methodology.
 - Assert that a secret handle expires and cannot be reused after expiration.
 
 ## 18. Terminology
+- **Snapshot Body**: The finalized cryptographic content of a snapshot. It contains metadata, AAD, nonce, sealed payload, auth tag, wrapped DEK, key identifiers, epoch and previous snapshot hash.
+- **Snapshot ID**: A deterministic hash computed as `sha256(canonical_snapshot_body)`. It must not include itself, attestations, or persistence receipts.
+- **Attestations**: The set of signatures proving that the Enclave and Consumer accepted the same finalized snapshot identity and body.
+- **Signature Input**: The canonical byte sequence signed by both parties: `signature_input = canonical({ snapshot_id, snapshot_body })`.
+- **Persistence Receipt**: Provider-specific storage metadata, such as GitHub repository, branch, commit SHA and committed timestamp. It does not define the cryptographic identity of the snapshot.
 - **Enclave**: The trusted runtime boundary where cryptographic operations occur.
-- **Snapshot**: A point-in-time representation of the secret state.
 - **Data Encryption Key (DEK)**: The ephemeral symmetric key used to seal the payload.
 - **Key Encryption Key (KEK)**: The key used to encrypt (wrap) the DEK.
 - **Sealed Payload**: Data encrypted via AES-256-GCM using the DEK.
