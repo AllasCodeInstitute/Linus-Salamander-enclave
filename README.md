@@ -11,6 +11,18 @@ The documentation has been split into dedicated files for better readability and
 - [**SPEC.md**](./SPEC.md): The complete technical specification, including architecture, components, cryptographic models, API surface, flows, and security invariants.
 - [**THREAT_MODEL.md**](./THREAT_MODEL.md): The detailed threat model, security assumptions, attacker capabilities, and a comprehensive failure modes table.
 
+## Core Cryptographic Contract
+
+```text
+snapshot_id = sha256(canonical_snapshot_body)
+signature_input = canonical({ snapshot_id, snapshot_body })
+
+GitHub stores:
+{ snapshot_body, snapshot_id, attestations, persistence_receipt }
+
+GitHub never defines cryptographic validity.
+```
+
 ## Design Goals
 
 - Zero local plaintext persistence.

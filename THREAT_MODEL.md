@@ -32,7 +32,15 @@
 - A trusted monotonic epoch or chain head is maintained to prevent replay attacks.
 - The system strictly validates signatures, previous hashes, and epochs before accepting any snapshot.
 
-## 2. Failure Modes
+## 2. Out of Scope
+
+The following vectors are explicitly out of scope for the LSES software threat model:
+- **Total Host Compromise:** Full root/kernel compromise of the runtime host where the Enclave resides.
+- **Memory Extraction:** Direct memory scraping without hardware enclaves (e.g., SGX/Nitro Enclaves). If hardware-backed isolation is absent, memory extraction is unmitigable.
+- **Key Compromise:** Leakage of the Enclave's private signing keys or Key Encryption Key (KEK).
+- **Physical Access:** Direct physical extraction of local RAM or hardware keys.
+
+## 3. Failure Modes
 
 | Failure | Detection | Expected Behavior |
 |---|---|---|

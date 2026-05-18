@@ -75,14 +75,14 @@ Secret plaintext
 - **Invariants:** Plaintext DEKs must be purged from memory immediately after sealing or unsealing operations.
 
 ### DualAttestationSigner
-- **Responsibility:** Signs the canonical snapshot envelope with the Enclave's identity and coordinates consumer countersigning.
+- **Responsibility:** Signs the `signature_input = canonical({ snapshot_id, snapshot_body })` with the Enclave's identity and coordinates consumer countersigning.
 - **Inputs:** Sealed snapshot.
 - **Outputs:** `Secret.snapshot.signed_by_enclave`, `Secret.snapshot.countersigned_by_consumer`.
 - **Invariants:** Signatures must be applied to the canonicalized envelope.
 
 ### ConsumerCountersignatureVerifier
 - **Responsibility:** Validates that the consuming system has actively approved the snapshot.
-- **Inputs:** Consumer signature, canonical envelope, consumer public key.
+- **Inputs:** Consumer signature, `signature_input`, consumer public key.
 - **Outputs:** Verification boolean.
 - **Invariants:** Invalid signatures must immediately halt the pipeline.
 
@@ -515,7 +515,7 @@ LSES requires a rigorous testing methodology.
 - Canonical snapshot body is complete before computing `snapshot_id` and `signature_input`.
 - Enclave signature fails if `epoch` changes after signing.
 - Enclave signature fails if `previous_snapshot_hash` changes after signing.
-- Consumer countersignature fails if it was produced over the request instead of canonical envelope body.
+- Consumer countersignature fails if it was produced over the request instead of `signature_input = canonical({ snapshot_id, snapshot_body })`.
 - Nonce reuse is detected for the same DEK/context.
 - Snapshot canonicalization is fully deterministic.
 - AES-256-GCM seal and unseal operations succeed with valid keys.
