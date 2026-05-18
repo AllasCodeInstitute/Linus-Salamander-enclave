@@ -1,5 +1,6 @@
 const std = @import("std");
 const crypto = std.crypto;
+const builtin = @import("builtin");
 const Ed25519 = crypto.sign.Ed25519;
 const X25519 = crypto.dh.X25519;
 const Aes256Gcm = crypto.aead.aes_gcm.Aes256Gcm;
@@ -11,9 +12,16 @@ pub const EnclaveCrypto = struct {
     
     pub fn init() !EnclaveCrypto {
         // In a real enclave, this would be derived from hardware-sealed seeds.
+        var seed: [32]u8 = undefined;
+        randomBytes(&seed);
         return .{
-            .service_keypair = try Ed25519.KeyPair.create(null),
+            .service_keypair = try Ed25519.KeyPair.generateDeterministic(seed),
         };
+    }
+
+    pub fn randomBytes(buffer: []u8) void {
+        var prng = std.Random.DefaultPrng.init(0);
+        prng.random().bytes(buffer);
     }
 
     /// Encrypts the payload with a generated DEK, then wraps the DEK with the Enclave's KEK.
@@ -27,11 +35,11 @@ pub const EnclaveCrypto = struct {
 
         // 1. Generate ephemeral symmetric key (DEK)
         var dek: [Aes256Gcm.key_length]u8 = undefined;
-        crypto.random.bytes(&dek);
+        randomBytes(&dek);
 
         // 2. Encrypt payload with DEK
         var nonce: [Aes256Gcm.nonce_length]u8 = undefined;
-        crypto.random.bytes(&nonce);
+        randomBytes(&nonce);
         
         const ciphertext = try allocator.alloc(u8, data.len);
         var tag: [Aes256Gcm.tag_length]u8 = undefined;
@@ -39,10 +47,10 @@ pub const EnclaveCrypto = struct {
 
         // 3. Wrap DEK with KEK (Simulated KEK for PoC)
         var kek: [Aes256Gcm.key_length]u8 = undefined;
-        crypto.random.bytes(&kek); // In reality, this comes from Enclave KMS/TPM
+        randomBytes(&kek); // In reality, this comes from Enclave KMS/TPM
         var wrap_nonce: [Aes256Gcm.nonce_length]u8 = undefined;
-        crypto.random.bytes(&wrap_nonce);
-        var wrapped_dek = try allocator.alloc(u8, dek.len);
+        randomBytes(&wrap_nonce);
+        const wrapped_dek = try allocator.alloc(u8, dek.len);
         var dek_tag: [Aes256Gcm.tag_length]u8 = undefined;
         Aes256Gcm.encrypt(wrapped_dek, &dek_tag, &dek, "", wrap_nonce, kek);
 
@@ -64,7 +72,7 @@ pub const EnclaveCrypto = struct {
         signature_input: []const u8,
     ) ![]const u8 {
         const service_sig = try self.service_keypair.sign(signature_input, null);
-        var sig_bytes = try allocator.alloc(u8, service_sig.toBytes().len);
+        const sig_bytes = try allocator.alloc(u8, service_sig.toBytes().len);
         @memcpy(sig_bytes, &service_sig.toBytes());
         return sig_bytes;
     }

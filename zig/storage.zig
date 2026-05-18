@@ -50,7 +50,8 @@ pub const StorageEnclave = struct {
         const snapshot_id = "sha256(canonical_snapshot_body)"; // placeholder
         
         // 5. Build Signature Input
-        const signature_input = "signature_input = canonical({ snapshot_id, snapshot_body })";
+        const signature_input = try std.fmt.allocPrint(self.allocator, "signature_input = canonical({{ {s}, {s} }})", .{ snapshot_id, snapshot_body });
+        defer self.allocator.free(signature_input);
 
         // 6. Sign Signature Input
         const signature = try self.crypto_engine.signEnvelope(self.allocator, signature_input);
