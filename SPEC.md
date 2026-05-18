@@ -78,7 +78,7 @@ Secret plaintext
 - **Responsibility:** Signs the `signature_input = canonical({ snapshot_id, snapshot_body })` with the Enclave's identity and coordinates consumer countersigning.
 - **Inputs:** Sealed snapshot.
 - **Outputs:** `Secret.snapshot.signed_by_enclave`, `Secret.snapshot.countersigned_by_consumer`.
-- **Invariants:** Signatures must be applied to the canonicalized envelope.
+- **Invariants:** Signatures must be applied to `signature_input = canonical({ snapshot_id, snapshot_body })`.
 
 ### ConsumerCountersignatureVerifier
 - **Responsibility:** Validates that the consuming system has actively approved the snapshot.
@@ -393,7 +393,7 @@ Explicação do contrato de identidade:
 - **Invariant LSES-017 — Commit SHA Is Not Snapshot Identity:** Git commit SHA is a persistence receipt and must not be required to compute the cryptographic snapshot identity.
 - **Invariant LSES-018 — Security-Critical Fields Before Signing:** All security-critical fields, including epoch, previous_snapshot_hash, AAD, sealed_payload, auth_tag and wrapped_dek, must be finalized before Enclave signature and Consumer countersignature.
 - **Invariant LSES-019 — Nonce Reuse Refutation:** AES-GCM nonce reuse within the same key/context must refute the operation and emit `Secret.nonce.reused`.
-- **Invariant LSES-020 — Persistence Receipt Separation:** Persistence receipts may be stored and audited, but they are separate from the canonical cryptographic envelope unless explicitly signed in a second-stage receipt signature.
+- **Invariant LSES-020 — Persistence Receipt Separation:** Persistence receipts may be stored and audited, but they are separate from the canonical snapshot body unless explicitly signed in a second-stage receipt signature.
 - **Invariant LSES-021 — Snapshot ID Non-Self-Reference:** `snapshot_id` must be computed from `canonical_snapshot_body` and must not include itself, attestations, or persistence receipts in its hash input.
 - **Invariant LSES-022 — Shared Signature Input:** The Enclave signature and Consumer countersignature must both verify against the same `signature_input = canonical({ snapshot_id, snapshot_body })`.
 - **Invariant LSES-023 — Persistence Receipt Exclusion:** `persistence_receipt` must not affect `snapshot_id` or core snapshot signature verification unless a separate receipt-signing protocol is explicitly enabled.

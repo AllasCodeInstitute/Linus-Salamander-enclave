@@ -12,8 +12,8 @@ pub const SnapshotBodyJson = struct {
     epoch: u64,
     previous_snapshot_hash: []const u8, // hex
     created_at: []const u8,
-    algorithm: AlgorithmSpecJson,
-    aad: AadSpecJson,
+    algorithm: AlgorithmDescriptorJson,
+    aad: SnapshotAadJson,
     nonce: []const u8, // hex
     sealed_payload: []const u8, // hex
     auth_tag: []const u8, // hex
@@ -25,14 +25,14 @@ pub const SnapshotBodyJson = struct {
     consumer_public_key_id: []const u8,
 };
 
-pub const AlgorithmSpecJson = struct {
+pub const AlgorithmDescriptorJson = struct {
     content_encryption: []const u8,
     key_wrapping: []const u8,
     enclave_signature: []const u8,
     consumer_signature: []const u8,
 };
 
-pub const AadSpecJson = struct {
+pub const SnapshotAadJson = struct {
     project: []const u8,
     environment: []const u8,
     snapshot_type: []const u8,
@@ -50,11 +50,11 @@ pub const PersistenceReceiptJson = struct {
     provider: []const u8,
     repository: []const u8,
     branch: []const u8,
-    commit_sha: []const u8,
+    commit_sha: ?[]const u8,
     committed_at: ?[]const u8,
 };
 
-pub const CryptographicEnvelopeJson = struct {
+pub const SnapshotEnvelopeJson = struct {
     snapshot_body: SnapshotBodyJson,
     snapshot_id: []const u8, // hex
     attestations: AttestationsJson,
@@ -62,37 +62,47 @@ pub const CryptographicEnvelopeJson = struct {
 };
 
 /// Conversion helpers from runtime binary to JSON serialization structs
-pub fn fromEnvelopeToJson(allocator: std.mem.Allocator, env: crypto.CryptographicEnvelope) !CryptographicEnvelopeJson {
+fn toHexAlloc(allocator: std.mem.Allocator, bytes: []const u8) ![]u8 {
+    const hex = try allocator.alloc(u8, bytes.len * 2);
+    const chars = "0123456789abcdef";
+    for (bytes, 0..) |b, i| {
+        hex[i * 2] = chars[b >> 4];
+        hex[i * 2 + 1] = chars[b & 0x0f];
+    }
+    return hex;
+}
+
+pub fn fromEnvelopeToJson(allocator: std.mem.Allocator, env: crypto.SnapshotEnvelope) !SnapshotEnvelopeJson {
     const body = env.snapshot_body;
     
-    const secret_ref_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&body.secret_ref)});
+    const secret_ref_hex = try toHexAlloc(allocator, &body.secret_ref);
     errdefer allocator.free(secret_ref_hex);
     
-    const prev_hash_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&body.previous_snapshot_hash)});
+    const prev_hash_hex = try toHexAlloc(allocator, &body.previous_snapshot_hash);
     errdefer allocator.free(prev_hash_hex);
 
-    const nonce_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&body.nonce)});
+    const nonce_hex = try toHexAlloc(allocator, &body.nonce);
     errdefer allocator.free(nonce_hex);
 
-    const auth_tag_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&body.auth_tag)});
+    const auth_tag_hex = try toHexAlloc(allocator, &body.auth_tag);
     errdefer allocator.free(auth_tag_hex);
 
-    const wrap_nonce_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&body.wrap_nonce)});
+    const wrap_nonce_hex = try toHexAlloc(allocator, &body.wrap_nonce);
     errdefer allocator.free(wrap_nonce_hex);
 
-    const wrap_auth_tag_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&body.wrap_auth_tag)});
+    const wrap_auth_tag_hex = try toHexAlloc(allocator, &body.wrap_auth_tag);
     errdefer allocator.free(wrap_auth_tag_hex);
 
-    const aad_prev_hash_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&body.aad.previous_snapshot_hash)});
+    const aad_prev_hash_hex = try toHexAlloc(allocator, &body.aad.previous_snapshot_hash);
     errdefer allocator.free(aad_prev_hash_hex);
 
-    const snapshot_id_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&env.snapshot_id)});
+    const snapshot_id_hex = try toHexAlloc(allocator, &env.snapshot_id);
     errdefer allocator.free(snapshot_id_hex);
 
-    const enclave_sig_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&env.attestations.enclave_signature)});
+    const enclave_sig_hex = try toHexAlloc(allocator, &env.attestations.enclave_signature);
     errdefer allocator.free(enclave_sig_hex);
 
-    const consumer_sig_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&env.attestations.consumer_countersignature)});
+    const consumer_sig_hex = try toHexAlloc(allocator, &env.attestations.consumer_countersignature);
     errdefer allocator.free(consumer_sig_hex);
 
     const wrapped_dek_hex = try allocator.dupe(u8, body.wrapped_dek);
@@ -107,12 +117,12 @@ pub fn fromEnvelopeToJson(allocator: std.mem.Allocator, env: crypto.Cryptographi
             .provider = try allocator.dupe(u8, pr.provider),
             .repository = try allocator.dupe(u8, pr.repository),
             .branch = try allocator.dupe(u8, pr.branch),
-            .commit_sha = try allocator.dupe(u8, pr.commit_sha),
+            .commit_sha = if (pr.commit_sha) |sha| try allocator.dupe(u8, sha) else null,
             .committed_at = if (pr.committed_at) |ca| try allocator.dupe(u8, ca) else null,
         };
     }
 
-    return CryptographicEnvelopeJson{
+    return SnapshotEnvelopeJson{
         .snapshot_body = .{
             .schema_version = try allocator.dupe(u8, body.schema_version),
             .project_id = try allocator.dupe(u8, body.project_id),
@@ -155,7 +165,7 @@ pub fn fromEnvelopeToJson(allocator: std.mem.Allocator, env: crypto.Cryptographi
     };
 }
 
-pub fn freeEnvelopeJson(allocator: std.mem.Allocator, env: *CryptographicEnvelopeJson) void {
+pub fn freeEnvelopeJson(allocator: std.mem.Allocator, env: *SnapshotEnvelopeJson) void {
     const sb = env.snapshot_body;
     allocator.free(sb.schema_version);
     allocator.free(sb.project_id);
@@ -189,12 +199,12 @@ pub fn freeEnvelopeJson(allocator: std.mem.Allocator, env: *CryptographicEnvelop
         allocator.free(pr.provider);
         allocator.free(pr.repository);
         allocator.free(pr.branch);
-        allocator.free(pr.commit_sha);
+        if (pr.commit_sha) |sha| allocator.free(sha);
         if (pr.committed_at) |ca| allocator.free(ca);
     }
 }
 
-pub fn fromJsonToEnvelope(allocator: std.mem.Allocator, json: CryptographicEnvelopeJson) !crypto.CryptographicEnvelope {
+pub fn fromJsonToEnvelope(allocator: std.mem.Allocator, json: SnapshotEnvelopeJson) !crypto.SnapshotEnvelope {
     const sb = json.snapshot_body;
     
     var secret_ref: [32]u8 = undefined;
@@ -233,12 +243,12 @@ pub fn fromJsonToEnvelope(allocator: std.mem.Allocator, json: CryptographicEnvel
             .provider = try allocator.dupe(u8, pr_json.provider),
             .repository = try allocator.dupe(u8, pr_json.repository),
             .branch = try allocator.dupe(u8, pr_json.branch),
-            .commit_sha = try allocator.dupe(u8, pr_json.commit_sha),
+            .commit_sha = if (pr_json.commit_sha) |sha| try allocator.dupe(u8, sha) else null,
             .committed_at = if (pr_json.committed_at) |ca| try allocator.dupe(u8, ca) else null,
         };
     }
 
-    return crypto.CryptographicEnvelope{
+    return crypto.SnapshotEnvelope{
         .snapshot_body = .{
             .schema_version = try allocator.dupe(u8, sb.schema_version),
             .project_id = try allocator.dupe(u8, sb.project_id),
@@ -281,7 +291,7 @@ pub fn fromJsonToEnvelope(allocator: std.mem.Allocator, json: CryptographicEnvel
     };
 }
 
-pub fn freeEnvelope(allocator: std.mem.Allocator, env: *crypto.CryptographicEnvelope) void {
+pub fn freeEnvelope(allocator: std.mem.Allocator, env: *crypto.SnapshotEnvelope) void {
     const sb = env.snapshot_body;
     allocator.free(sb.schema_version);
     allocator.free(sb.project_id);
@@ -305,10 +315,37 @@ pub fn freeEnvelope(allocator: std.mem.Allocator, env: *crypto.CryptographicEnve
         allocator.free(pr.provider);
         allocator.free(pr.repository);
         allocator.free(pr.branch);
-        allocator.free(pr.commit_sha);
+        if (pr.commit_sha) |sha| allocator.free(sha);
         if (pr.committed_at) |ca| allocator.free(ca);
     }
 }
+
+pub const PendingSnapshot = struct {
+    envelope: crypto.SnapshotEnvelope,
+    snapshot_id: [32]u8,
+    epoch: u64,
+};
+
+pub const CommittedSnapshot = struct {
+    envelope: crypto.SnapshotEnvelope,
+    snapshot_id: [32]u8,
+    epoch: u64,
+    persistence_receipt: crypto.PersistenceReceipt,
+};
+
+pub const SecretWriteRequest = struct {
+    project_id: []const u8,
+    environment: []const u8,
+    secret_name: []const u8,
+    secret_value: []const u8,
+};
+
+pub const SecretWriteResult = struct {
+    snapshot_id: [32]u8,
+    epoch: u64,
+    purged: bool,
+    persistence_receipt: crypto.PersistenceReceipt,
+};
 
 /// Linus Salamander Enclave Storage Engine
 pub const StorageEnclave = struct {
@@ -395,12 +432,330 @@ pub const StorageEnclave = struct {
         self.allocator.free(self.policy.allowed_consumers);
     }
 
+    pub fn buildPendingSnapshot(
+        self: *StorageEnclave,
+        allocator: std.mem.Allocator,
+        request: SecretWriteRequest,
+    ) !PendingSnapshot {
+        // 1. Serialize data to raw plaintext
+        var list = std.ArrayList(u8).empty;
+        defer list.deinit(allocator);
+        
+        var it = self.secrets.iterator();
+        while (it.next()) |entry| {
+            try list.appendSlice(allocator, entry.key_ptr.*);
+            try list.appendSlice(allocator, ":");
+            try list.appendSlice(allocator, entry.value_ptr.*);
+            try list.appendSlice(allocator, "\n");
+        }
+
+        // 2. Ephemeral symmetric key
+        var dek: [32]u8 = undefined;
+        crypto.EnclaveCrypto.randomBytes(&dek);
+        defer crypto.secureZero(&dek);
+
+        // 3. Nonce
+        var nonce: [12]u8 = undefined;
+        crypto.EnclaveCrypto.randomBytes(&nonce);
+
+        var previous_snapshot_hash = [32]u8{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+        if (self.trusted_chain_head) |head| {
+            previous_snapshot_hash = head;
+        }
+
+        const next_epoch = self.last_accepted_epoch + 1;
+
+        const aad_data = crypto.SnapshotAad{
+            .project = request.project_id,
+            .environment = request.environment,
+            .snapshot_type = "secret",
+            .operation = "write_secret",
+            .epoch = next_epoch,
+            .previous_snapshot_hash = previous_snapshot_hash,
+        };
+        const canonical_aad = try crypto.canonicalizeAad(allocator, aad_data);
+        defer allocator.free(canonical_aad);
+
+        const sealed = try crypto.sealPayload(allocator, list.items, &dek, nonce, canonical_aad);
+        defer allocator.free(sealed.ciphertext);
+
+        // 4. Wrap DEK
+        const wrapped = try self.kek_provider.provider().wrap(allocator, &dek, self.kek_provider.key_id);
+
+        const sealed_payload_hex = try toHexAlloc(allocator, sealed.ciphertext);
+        errdefer allocator.free(sealed_payload_hex);
+
+        const wrapped_dek_hex = try toHexAlloc(allocator, &wrapped.wrapped_dek);
+        errdefer allocator.free(wrapped_dek_hex);
+
+        // 5. Derive secret_ref
+        const secret_ref = crypto.computeSecretRef(request.project_id, request.environment, request.secret_name);
+
+        const snapshot_body = crypto.SnapshotBody{
+            .schema_version = try allocator.dupe(u8, "lses.snapshot.v1"),
+            .project_id = try allocator.dupe(u8, request.project_id),
+            .environment = try allocator.dupe(u8, request.environment),
+            .operation = try allocator.dupe(u8, "write_secret"),
+            .secret_ref = secret_ref,
+            .epoch = next_epoch,
+            .previous_snapshot_hash = previous_snapshot_hash,
+            .created_at = try allocator.dupe(u8, "2026-05-18T00:00:00Z"),
+            .algorithm = .{
+                .content_encryption = try allocator.dupe(u8, "AES-256-GCM"),
+                .key_wrapping = try allocator.dupe(u8, "LOCAL-DEV-AES-256-GCM"),
+                .enclave_signature = try allocator.dupe(u8, "Ed25519"),
+                .consumer_signature = try allocator.dupe(u8, "Ed25519"),
+            },
+            .aad = .{
+                .project = try allocator.dupe(u8, request.project_id),
+                .environment = try allocator.dupe(u8, request.environment),
+                .snapshot_type = try allocator.dupe(u8, "secret"),
+                .operation = try allocator.dupe(u8, "write_secret"),
+                .epoch = next_epoch,
+                .previous_snapshot_hash = previous_snapshot_hash,
+            },
+            .nonce = nonce,
+            .sealed_payload = sealed_payload_hex,
+            .auth_tag = sealed.auth_tag,
+            .wrapped_dek = wrapped_dek_hex,
+            .wrap_nonce = wrapped.wrap_nonce,
+            .wrap_auth_tag = wrapped.wrap_auth_tag,
+            .dek_wrapping_key_id = try allocator.dupe(u8, self.kek_provider.key_id),
+            .enclave_public_key_id = try allocator.dupe(u8, self.enclave_identity.key_id),
+            .consumer_public_key_id = try allocator.dupe(u8, self.consumer_identity.key_id),
+        };
+        errdefer {
+            allocator.free(snapshot_body.schema_version);
+            allocator.free(snapshot_body.project_id);
+            allocator.free(snapshot_body.environment);
+            allocator.free(snapshot_body.operation);
+            allocator.free(snapshot_body.created_at);
+            allocator.free(snapshot_body.algorithm.content_encryption);
+            allocator.free(snapshot_body.algorithm.key_wrapping);
+            allocator.free(snapshot_body.algorithm.enclave_signature);
+            allocator.free(snapshot_body.algorithm.consumer_signature);
+            allocator.free(snapshot_body.aad.project);
+            allocator.free(snapshot_body.aad.environment);
+            allocator.free(snapshot_body.aad.snapshot_type);
+            allocator.free(snapshot_body.aad.operation);
+            allocator.free(snapshot_body.dek_wrapping_key_id);
+            allocator.free(snapshot_body.enclave_public_key_id);
+            allocator.free(snapshot_body.consumer_public_key_id);
+        }
+
+        // 6. Compute snapshot_id
+        const canonical_body = try crypto.canonicalizeSnapshotBody(allocator, snapshot_body);
+        defer allocator.free(canonical_body);
+        const snapshot_id = crypto.computeSnapshotId(canonical_body);
+
+        // 7. Signature input & sign
+        const signature_input = try crypto.canonicalizeSignatureInput(allocator, snapshot_id, snapshot_body);
+        defer allocator.free(signature_input);
+
+        const enclave_sig = try crypto.signEd25519(signature_input, self.enclave_identity.private_key.?);
+        const consumer_sig = try crypto.signEd25519(signature_input, self.consumer_identity.private_key.?);
+
+        const envelope = crypto.SnapshotEnvelope{
+            .snapshot_body = snapshot_body,
+            .snapshot_id = snapshot_id,
+            .attestations = .{
+                .enclave_signature = enclave_sig,
+                .consumer_countersignature = consumer_sig,
+            },
+            .persistence_receipt = null,
+        };
+
+        return PendingSnapshot{
+            .envelope = envelope,
+            .snapshot_id = snapshot_id,
+            .epoch = next_epoch,
+        };
+    }
+
+    pub fn persistEnvelope(
+        self: *StorageEnclave,
+        allocator: std.mem.Allocator,
+        envelope_without_receipt: crypto.SnapshotEnvelope,
+    ) !crypto.PersistenceReceipt {
+        const filename = "enclave.sealed.json";
+        
+        // 1. Write the initial envelope JSON (with null receipt) to disk
+        var initial_env = envelope_without_receipt;
+        initial_env.persistence_receipt = null;
+        try self.saveEnvelopeJson(allocator, initial_env);
+
+        // 2. Perform git commit/push if repo path is non-empty
+        if (self.git_sync.repo_path.len > 0) {
+            var sync = git.GitSync.init(allocator, self.git_sync.repo_path);
+            
+            // git add filename
+            sync.runGit(self.io, &.{ "add", filename }) catch {
+                return crypto.LsesError.PersistenceFailed;
+            };
+
+            // git commit
+            var msg_buf: [128]u8 = undefined;
+            const msg = std.fmt.bufPrint(&msg_buf, "feat(vault): persist snapshot epoch {d}", .{envelope_without_receipt.snapshot_body.epoch}) catch "feat(vault): snapshot update";
+            _ = sync.runGit(self.io, &.{ "commit", "-m", msg }) catch {}; // Commit failure is soft
+
+            // git push
+            sync.runGit(self.io, &.{ "push", "origin", "main" }) catch {
+                std.debug.print("[LSES Warning] Git push failed (offline/no remote origin). Snapshot committed locally.\n", .{});
+            };
+
+            // Query commit SHA
+            var sha_args = std.ArrayList([]const u8).empty;
+            defer sha_args.deinit(allocator);
+            try sha_args.append(allocator, "git");
+            try sha_args.append(allocator, "-c");
+            try sha_args.append(allocator, "user.name=AllasCode Worker");
+            try sha_args.append(allocator, "-c");
+            try sha_args.append(allocator, "user.email=worker@allascode.com");
+            try sha_args.append(allocator, "rev-parse");
+            try sha_args.append(allocator, "HEAD");
+
+            const run_res = std.process.run(allocator, self.io, .{
+                .argv = sha_args.items,
+                .cwd = .{ .path = self.git_sync.repo_path },
+                .reserve_amount = 64,
+            }) catch {
+                return crypto.PersistenceReceipt{
+                    .provider = try allocator.dupe(u8, "github"),
+                    .repository = try allocator.dupe(u8, "owner/repo"),
+                    .branch = try allocator.dupe(u8, "main"),
+                    .commit_sha = try allocator.dupe(u8, "unknown_sha"),
+                    .committed_at = try allocator.dupe(u8, "2026-05-18T00:00:00Z"),
+                };
+            };
+            defer allocator.free(run_res.stdout);
+            defer allocator.free(run_res.stderr);
+
+            var success = false;
+            switch (run_res.term) {
+                .exited => |code| {
+                    if (code == 0 and run_res.stdout.len >= 40) {
+                        success = true;
+                    }
+                },
+                else => {},
+            }
+
+            const sha_str = if (success) try allocator.dupe(u8, run_res.stdout[0..40]) else try allocator.dupe(u8, "unknown_sha");
+
+            return crypto.PersistenceReceipt{
+                .provider = try allocator.dupe(u8, "github"),
+                .repository = try allocator.dupe(u8, "owner/repo"),
+                .branch = try allocator.dupe(u8, "main"),
+                .commit_sha = sha_str,
+                .committed_at = try allocator.dupe(u8, "2026-05-18T00:00:00Z"),
+            };
+        }
+
+        // 3. Fallback / local dev persistence receipt
+        return crypto.PersistenceReceipt{
+            .provider = "local",
+            .repository = "local-dev",
+            .branch = "main",
+            .commit_sha = null,
+            .committed_at = "2026-05-18T00:00:00Z",
+        };
+    }
+
+    pub fn saveEnvelopeJson(self: *StorageEnclave, allocator: std.mem.Allocator, envelope: crypto.SnapshotEnvelope) !void {
+        var envelope_json = try fromEnvelopeToJson(allocator, envelope);
+        defer freeEnvelopeJson(allocator, &envelope_json);
+
+        const filename = "enclave.sealed.json";
+        const file = try std.Io.Dir.cwd().createFile(self.io, filename, .{});
+        defer file.close(self.io);
+        var write_buf: [4096]u8 = undefined;
+        var file_writer = file.writer(self.io, &write_buf);
+        try std.json.Stringify.value(envelope_json, .{}, &file_writer.interface);
+        try file_writer.flush();
+    }
+
+    pub fn writeSecret(
+        self: *StorageEnclave,
+        allocator: std.mem.Allocator,
+        request: SecretWriteRequest,
+    ) !SecretWriteResult {
+        const dup_key = try self.allocator.dupe(u8, request.secret_name);
+        const dup_val = try self.allocator.dupe(u8, request.secret_value);
+        var committed_to_map = false;
+
+        errdefer {
+            if (!committed_to_map) {
+                self.allocator.free(dup_key);
+                self.allocator.free(dup_val);
+            }
+        }
+
+        const old_val = try self.secrets.fetchPut(dup_key, dup_val);
+        committed_to_map = true;
+
+        errdefer {
+            if (old_val) |ov| {
+                _ = self.secrets.put(dup_key, ov.value) catch {};
+                self.allocator.free(dup_val);
+            } else {
+                _ = self.secrets.remove(dup_key);
+                self.allocator.free(dup_key);
+                self.allocator.free(dup_val);
+            }
+        }
+
+        const pending = try self.buildPendingSnapshot(allocator, request);
+        errdefer {
+            var env_to_free = pending.envelope;
+            freeEnvelope(self.allocator, &env_to_free);
+        }
+
+        const receipt = try self.persistEnvelope(allocator, pending.envelope);
+        errdefer {
+            if (receipt.commit_sha) |sha| allocator.free(sha);
+        }
+
+        var committed_envelope = pending.envelope;
+        committed_envelope.persistence_receipt = receipt;
+
+        try self.saveEnvelopeJson(allocator, committed_envelope);
+
+        // Update crypto states only after absolute success
+        self.trusted_chain_head = pending.snapshot_id;
+        self.last_accepted_epoch = pending.epoch;
+
+        if (old_val) |ov| {
+            self.allocator.free(ov.key);
+            self.allocator.free(ov.value);
+        }
+
+        committed_envelope.persistence_receipt = null;
+        freeEnvelope(self.allocator, &committed_envelope);
+
+        return SecretWriteResult{
+            .snapshot_id = pending.snapshot_id,
+            .epoch = pending.epoch,
+            .purged = true,
+            .persistence_receipt = receipt,
+        };
+    }
+
     pub fn putSecret(self: *StorageEnclave, key: []const u8, value: []const u8) !void {
-        try self.secrets.put(try self.allocator.dupe(u8, key), try self.allocator.dupe(u8, value));
-        const receipt = try self.takeSnapshot();
-        self.last_accepted_epoch += 1;
-        // In a real system, the receipt's commit SHA would update our local state cache index
-        _ = receipt;
+        const res = try self.writeSecret(self.allocator, .{
+            .project_id = "allascode",
+            .environment = "prod",
+            .secret_name = key,
+            .secret_value = value,
+        });
+        if (res.persistence_receipt.commit_sha) |sha| {
+            self.allocator.free(sha);
+        }
+        self.allocator.free(res.persistence_receipt.provider);
+        self.allocator.free(res.persistence_receipt.repository);
+        self.allocator.free(res.persistence_receipt.branch);
+        if (res.persistence_receipt.committed_at) |ca| {
+            self.allocator.free(ca);
+        }
     }
 
     pub fn readSecret(self: *StorageEnclave, expected_consumer: []const u8) !crypto.RuntimeSecretHandle {
@@ -412,7 +767,7 @@ pub const StorageEnclave = struct {
         const json_data = try r.interface.allocRemaining(self.allocator, std.Io.Limit.limited(1024 * 1024));
         defer self.allocator.free(json_data);
 
-        var parsed = try std.json.parseFromSlice(CryptographicEnvelopeJson, self.allocator, json_data, .{});
+        var parsed = try std.json.parseFromSlice(SnapshotEnvelopeJson, self.allocator, json_data, .{});
         defer parsed.deinit();
 
         var envelope = try fromJsonToEnvelope(self.allocator, parsed.value);
@@ -453,7 +808,7 @@ pub const StorageEnclave = struct {
             envelope,
             &ctx,
             &self.runtime_store,
-            std.time.timestamp(),
+            @intCast(@divTrunc(self.io.vtable.now(self.io.userdata, .real).nanoseconds, 1_000_000_000)),
         );
 
         return result.handle;
@@ -462,138 +817,24 @@ pub const StorageEnclave = struct {
     pub fn takeSnapshot(self: *StorageEnclave) !crypto.PersistenceReceipt {
         std.debug.print("Linus Salamander: Triggering State-of-the-Art Snapshot...\n", .{});
         
-        // 1. Serialize data to raw plaintext
-        var list = std.ArrayList(u8).empty;
-        defer list.deinit(self.allocator);
-        
-        var it = self.secrets.iterator();
-        while (it.next()) |entry| {
-            try list.appendSlice(self.allocator, entry.key_ptr.*);
-            try list.appendSlice(self.allocator, ":");
-            try list.appendSlice(self.allocator, entry.value_ptr.*);
-            try list.appendSlice(self.allocator, "\n");
-        }
-
-        // 2. Generate ephemeral symmetric key (DEK)
-        var dek: [32]u8 = undefined;
-        crypto.EnclaveCrypto.randomBytes(&dek);
-        defer crypto.secureZero(&dek);
-
-        // 3. Encrypt payload with DEK under canonical AAD
-        var nonce: [12]u8 = undefined;
-        crypto.EnclaveCrypto.randomBytes(&nonce);
-
-        var previous_snapshot_hash = [32]u8{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-        if (self.trusted_chain_head) |head| {
-            previous_snapshot_hash = head;
-        }
-
-        var payload_aad_buf = std.Io.Writer.Allocating.init(self.allocator);
-        defer payload_aad_buf.deinit();
-        const pw = payload_aad_buf.writer;
-        try pw.print("3:aad=121:5:project=9:allascode;11:environment=4:prod;13:snapshot_type=6:secret;9:operation=12:write_secret;epoch={d};22:previous_snapshot_hash=64:", .{self.last_accepted_epoch + 1});
-        for (previous_snapshot_hash) |b| {
-            try pw.print("{x:0>2}", .{b});
-        }
-        try pw.writeAll(";;\n");
-        const canonical_aad = try payload_aad_buf.toOwnedSlice();
-        defer self.allocator.free(canonical_aad);
-
-        const sealed = try crypto.sealPayload(self.allocator, list.items, &dek, nonce, canonical_aad);
-        defer self.allocator.free(sealed.ciphertext);
-
-        // 4. Wrap DEK with KEK provider
-        const wrapped = try self.kek_provider.provider().wrap(self.allocator, &dek, self.kek_provider.key_id);
-
-        // Convert byte slices to hex strings for SnapshotBody JSON formats
-        const sealed_payload_hex = try std.fmt.allocPrint(self.allocator, "{s}", .{std.fmt.fmtSliceHexLower(sealed.ciphertext)});
-        defer self.allocator.free(sealed_payload_hex);
-
-        const wrapped_dek_hex = try std.fmt.allocPrint(self.allocator, "{s}", .{std.fmt.fmtSliceHexLower(&wrapped.wrapped_dek)});
-        defer self.allocator.free(wrapped_dek_hex);
-
-        // 5. Build finalized Snapshot Body
-        const secret_ref_dummy = [32]u8{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-        const snapshot_body = crypto.SnapshotBody{
-            .schema_version = "lses.snapshot.v1",
+        const pending = try self.buildPendingSnapshot(self.allocator, .{
             .project_id = "allascode",
             .environment = "prod",
-            .operation = "write_secret",
-            .secret_ref = secret_ref_dummy,
-            .epoch = self.last_accepted_epoch + 1,
-            .previous_snapshot_hash = previous_snapshot_hash,
-            .created_at = "2026-05-18T00:00:00Z",
-            .algorithm = .{
-                .content_encryption = "AES-256-GCM",
-                .key_wrapping = "LOCAL-DEV-AES-256-GCM",
-                .enclave_signature = "Ed25519",
-                .consumer_signature = "Ed25519",
-            },
-            .aad = .{
-                .project = "allascode",
-                .environment = "prod",
-                .snapshot_type = "secret",
-                .operation = "write_secret",
-                .epoch = self.last_accepted_epoch + 1,
-                .previous_snapshot_hash = previous_snapshot_hash,
-            },
-            .nonce = nonce,
-            .sealed_payload = sealed_payload_hex,
-            .auth_tag = sealed.auth_tag,
-            .wrapped_dek = wrapped_dek_hex,
-            .wrap_nonce = wrapped.wrap_nonce,
-            .wrap_auth_tag = wrapped.wrap_auth_tag,
-            .dek_wrapping_key_id = self.kek_provider.key_id,
-            .enclave_public_key_id = self.enclave_identity.key_id,
-            .consumer_public_key_id = self.consumer_identity.key_id,
-        };
+            .secret_name = "secret",
+            .secret_value = "",
+        });
+        var env_to_free = pending.envelope;
+        defer freeEnvelope(self.allocator, &env_to_free);
 
-        // 6. Compute snapshot_id (deterministic canonical hash)
-        const canonical_body = try crypto.canonicalizeSnapshotBody(self.allocator, snapshot_body);
-        defer self.allocator.free(canonical_body);
-        const snapshot_id = crypto.computeSnapshotId(canonical_body);
-        self.trusted_chain_head = snapshot_id;
+        const receipt = try self.persistEnvelope(self.allocator, pending.envelope);
 
-        // 7. Sign input
-        const signature_input = try crypto.canonicalizeSignatureInput(self.allocator, snapshot_id, snapshot_body);
-        defer self.allocator.free(signature_input);
+        var committed_envelope = pending.envelope;
+        committed_envelope.persistence_receipt = receipt;
 
-        const enclave_sig = try crypto.signEd25519(signature_input, self.enclave_identity.private_key.?);
-        const consumer_sig = try crypto.signEd25519(signature_input, self.consumer_identity.private_key.?);
+        try self.saveEnvelopeJson(self.allocator, committed_envelope);
 
-        const envelope = crypto.CryptographicEnvelope{
-            .snapshot_body = snapshot_body,
-            .snapshot_id = snapshot_id,
-            .attestations = .{
-                .enclave_signature = enclave_sig,
-                .consumer_countersignature = consumer_sig,
-            },
-            .persistence_receipt = null,
-        };
+        self.trusted_chain_head = pending.snapshot_id;
 
-        // Convert envelope to JSON serialization structure
-        var envelope_json = try fromEnvelopeToJson(self.allocator, envelope);
-        defer freeEnvelopeJson(self.allocator, &envelope_json);
-
-        // 8. Save to file
-        const filename = "enclave.sealed.json";
-        const file = try std.Io.Dir.cwd().createFile(self.io, filename, .{});
-        defer file.close(self.io);
-        var write_buf: [4096]u8 = undefined;
-        var file_writer = file.writer(self.io, &write_buf);
-        try std.json.Stringify.value(envelope_json, .{}, &file_writer.interface);
-        file.close(self.io);
-
-        // 9. Push to GitHub
-        try self.git_sync.commitAndPush(filename);
-
-        // 10. We return receipt and simulate git info
-        return crypto.PersistenceReceipt{
-            .provider = "github",
-            .repository = "owner/repo",
-            .branch = "main",
-            .commit_sha = "generated_commit_sha",
-            .committed_at = "2026-05-18T00:00:05Z",
-        };
+        return receipt;
     }
 };

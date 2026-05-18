@@ -110,7 +110,7 @@ test "Dual-Attestation - counter-signing with invalid key fails" {
     const enc_sig = try crypto.signEd25519(sig_input, enc_private);
     const cons_sig = try crypto.signEd25519(sig_input, cons_private);
 
-    const envelope = crypto.CryptographicEnvelope{
+    const envelope = crypto.SnapshotEnvelope{
         .snapshot_body = body,
         .snapshot_id = snapshot_id,
         .attestations = .{
@@ -219,16 +219,21 @@ test "Chain Recovery - detect rollback / nonce replay attacks" {
     var registry = crypto.NonceRegistry.init(testing.allocator);
     defer registry.deinit();
 
-    const nonce = [12]u8{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    const nonce = @as([12]u8, @splat(1));
+    const snapshot_id1 = @as([32]u8, @splat(0xaa));
+    const snapshot_id2 = @as([32]u8, @splat(0xbb));
 
     // First use: must succeed
-    try registry.checkAndRecord(testing.allocator, "test-context", nonce);
+    try registry.checkAndRecord(snapshot_id1, .payload, "test-context", nonce);
 
-    // Second use with the same context: must fail with NonceReused
-    try testing.expectError(crypto.LsesError.NonceReused, registry.checkAndRecord(testing.allocator, "test-context", nonce));
+    // Idempotent use with same snapshot: must succeed
+    try registry.checkAndRecord(snapshot_id1, .payload, "test-context", nonce);
 
-    // Use with a different context: must succeed
-    try registry.checkAndRecord(testing.allocator, "other-context", nonce);
+    // Second use with a different snapshot/same context: must fail with NonceReused
+    try testing.expectError(crypto.LsesError.NonceReused, registry.checkAndRecord(snapshot_id2, .payload, "test-context", nonce));
+
+    // Use with a different context/same snapshot: must succeed
+    try registry.checkAndRecord(snapshot_id1, .payload, "other-context", nonce);
 }
 
 // Group 7: Read Behavior & Dynamic Runtime Secret Store
@@ -236,21 +241,25 @@ test "Read Behavior - short-lived runtime handles expiring cleanly" {
     var store = crypto.RuntimeSecretStore.init(testing.allocator);
     defer store.deinit();
 
-    var handle_id: [32]u8 = undefined;
-    crypto.EnclaveCrypto.randomBytes(&handle_id);
-
     const plaintext = "volatile-secret-value-777";
-    const expires_at: i64 = 1000 + 2; // relative expires in 2 seconds
 
-    try store.put(handle_id, plaintext, expires_at);
+    const handle = try store.insert(plaintext, 2, 1000);
+    const handle_id = handle.handle_id;
 
     // Success read within bounds
     const read1 = store.get(handle_id, 1000);
     try testing.expect(read1 != null);
     try testing.expectEqualStrings(plaintext, read1.?);
+    testing.allocator.free(read1.?);
 
+    // Second read -> must return null because it's single use (consumed)
+    const read_second = store.get(handle_id, 1000);
+    try testing.expect(read_second == null);
+
+    // Create another handle to test expiry
+    const handle2 = try store.insert(plaintext, 2, 1000);
     // Read after expiry -> must return null
-    const read2 = store.get(handle_id, 1000 + 5);
+    const read2 = store.get(handle2.handle_id, 1005);
     try testing.expect(read2 == null);
 }
 
@@ -272,4 +281,193 @@ test "Storage Scan - zero plaintext leaked to files" {
     // Ensure the sensitive plaintext secret we used in demo is NOT present in raw ASCII
     const leaked = std.mem.indexOf(u8, data, "ls_secret_super_secure_token_12345");
     try testing.expect(leaked == null);
+}
+
+// Group 9: Robustness & Negative Tests
+fn createSignedMockEnvelope(
+    allocator: std.mem.Allocator,
+    enc_kp: std.crypto.sign.Ed25519.KeyPair,
+    cons_kp: std.crypto.sign.Ed25519.KeyPair,
+    epoch: u64,
+    prev_hash: [32]u8,
+) !crypto.SnapshotEnvelope {
+    var body = createMockSnapshotBody();
+    body.epoch = epoch;
+    body.previous_snapshot_hash = prev_hash;
+    body.aad.epoch = epoch;
+    body.aad.previous_snapshot_hash = prev_hash;
+
+    const cb = try crypto.canonicalizeSnapshotBody(allocator, body);
+    defer allocator.free(cb);
+
+    const snapshot_id = crypto.computeSnapshotId(cb);
+
+    const sig_input = try crypto.canonicalizeSignatureInput(allocator, snapshot_id, body);
+    defer allocator.free(sig_input);
+
+    const enc_private = enc_kp.secret_key.toBytes();
+    const cons_private = cons_kp.secret_key.toBytes();
+
+    const enc_sig = try crypto.signEd25519(sig_input, enc_private);
+    const cons_sig = try crypto.signEd25519(sig_input, cons_private);
+
+    return crypto.SnapshotEnvelope{
+        .snapshot_body = body,
+        .snapshot_id = snapshot_id,
+        .attestations = .{
+            .enclave_signature = enc_sig,
+            .consumer_countersignature = cons_sig,
+        },
+        .persistence_receipt = null,
+    };
+}
+
+test "rollback epoch rejection" {
+    var enc_seed: [32]u8 = undefined;
+    crypto.EnclaveCrypto.randomBytes(&enc_seed);
+    const enc_kp = try std.crypto.sign.Ed25519.KeyPair.generateDeterministic(enc_seed);
+
+    var cons_seed: [32]u8 = undefined;
+    crypto.EnclaveCrypto.randomBytes(&cons_seed);
+    const cons_kp = try std.crypto.sign.Ed25519.KeyPair.generateDeterministic(cons_seed);
+
+    const env = try createSignedMockEnvelope(testing.allocator, enc_kp, cons_kp, 1, @as([32]u8, @splat(0)));
+
+    const vk = crypto.VerificationKeys{
+        .enclave_key_id = "enc-pk-id",
+        .enclave_public_key = enc_kp.public_key.bytes,
+        .consumer_key_id = "cons-pk-id",
+        .consumer_public_key = cons_kp.public_key.bytes,
+    };
+
+    var registry = crypto.NonceRegistry.init(testing.allocator);
+    defer registry.deinit();
+
+    var ctx = crypto.VerificationContext{
+        .mode = .recovery_limited,
+        .trusted_chain_head = null,
+        .last_accepted_epoch = 2, // Last accepted is higher than envelope's epoch
+        .verification_keys = vk,
+        .policy = crypto.AccessPolicy{
+            .allow_plaintext_export = true,
+            .allowed_consumers = &[_][]const u8{"cons-pk-id"},
+        },
+        .nonce_registry = &registry,
+        .kek_resolver = undefined,
+    };
+
+    try testing.expectError(crypto.LsesError.RollbackDetected, crypto.verifySnapshot(testing.allocator, env, &ctx));
+}
+
+test "chain fork/gap detection" {
+    var enc_seed: [32]u8 = undefined;
+    crypto.EnclaveCrypto.randomBytes(&enc_seed);
+    const enc_kp = try std.crypto.sign.Ed25519.KeyPair.generateDeterministic(enc_seed);
+
+    var cons_seed: [32]u8 = undefined;
+    crypto.EnclaveCrypto.randomBytes(&cons_seed);
+    const cons_kp = try std.crypto.sign.Ed25519.KeyPair.generateDeterministic(cons_seed);
+
+    var store = crypto.RuntimeSecretStore.init(testing.allocator);
+    defer store.deinit();
+
+    const env1 = try createSignedMockEnvelope(testing.allocator, enc_kp, cons_kp, 1, @as([32]u8, @splat(0)));
+    const bad_prev_hash = @as([32]u8, @splat(9));
+    const env2 = try createSignedMockEnvelope(testing.allocator, enc_kp, cons_kp, 2, bad_prev_hash);
+
+    const envelopes = [_]crypto.SnapshotEnvelope{ env1, env2 };
+
+    const vk = crypto.VerificationKeys{
+        .enclave_key_id = "enc-pk-id",
+        .enclave_public_key = enc_kp.public_key.bytes,
+        .consumer_key_id = "cons-pk-id",
+        .consumer_public_key = cons_kp.public_key.bytes,
+    };
+
+    var registry = crypto.NonceRegistry.init(testing.allocator);
+    defer registry.deinit();
+
+    var ctx = crypto.VerificationContext{
+        .mode = .recovery_limited,
+        .trusted_chain_head = null,
+        .last_accepted_epoch = 0,
+        .verification_keys = vk,
+        .policy = crypto.AccessPolicy{
+            .allow_plaintext_export = true,
+            .allowed_consumers = &[_][]const u8{"cons-pk-id"},
+        },
+        .nonce_registry = &registry,
+        .kek_resolver = undefined,
+    };
+
+    try testing.expectError(crypto.LsesError.ChainMismatch, crypto.recoverLatest(
+        testing.allocator,
+        &envelopes,
+        &ctx,
+        &store,
+        1000,
+    ));
+}
+
+test "strict mode trust anchor enforcement" {
+    var enc_seed: [32]u8 = undefined;
+    crypto.EnclaveCrypto.randomBytes(&enc_seed);
+    const enc_kp = try std.crypto.sign.Ed25519.KeyPair.generateDeterministic(enc_seed);
+
+    var cons_seed: [32]u8 = undefined;
+    crypto.EnclaveCrypto.randomBytes(&cons_seed);
+    const cons_kp = try std.crypto.sign.Ed25519.KeyPair.generateDeterministic(cons_seed);
+
+    const env = try createSignedMockEnvelope(testing.allocator, enc_kp, cons_kp, 1, @as([32]u8, @splat(0)));
+
+    const vk = crypto.VerificationKeys{
+        .enclave_key_id = "enc-pk-id",
+        .enclave_public_key = enc_kp.public_key.bytes,
+        .consumer_key_id = "cons-pk-id",
+        .consumer_public_key = cons_kp.public_key.bytes,
+    };
+
+    var registry = crypto.NonceRegistry.init(testing.allocator);
+    defer registry.deinit();
+
+    var ctx = crypto.VerificationContext{
+        .mode = .strict,
+        .trusted_chain_head = null, // Empty anchor in strict mode!
+        .last_accepted_epoch = 0,
+        .verification_keys = vk,
+        .policy = crypto.AccessPolicy{
+            .allow_plaintext_export = true,
+            .allowed_consumers = &[_][]const u8{"cons-pk-id"},
+        },
+        .nonce_registry = &registry,
+        .kek_resolver = undefined,
+    };
+
+    try testing.expectError(crypto.LsesError.MissingTrustAnchor, crypto.verifySnapshot(testing.allocator, env, &ctx));
+}
+
+test "context separation integrity" {
+    var registry = crypto.NonceRegistry.init(testing.allocator);
+    defer registry.deinit();
+
+    const nonce = @as([12]u8, @splat(7));
+    const snapshot_id = @as([32]u8, @splat(0xcc));
+
+    // Register as payload
+    try registry.checkAndRecord(snapshot_id, .payload, "common-context", nonce);
+
+    // Register same nonce/context but as dek_wrap -> must succeed! Domain separation prevents mix-ups.
+    try registry.checkAndRecord(snapshot_id, .dek_wrap, "common-context", nonce);
+}
+
+test "secret_ref derivation uniqueness" {
+    const ref1 = crypto.computeSecretRef("proj", "prod", "secretA");
+    const ref2 = crypto.computeSecretRef("proj", "prod", "secretB");
+    const ref3 = crypto.computeSecretRef("proj", "dev", "secretA");
+
+    try testing.expect(!std.mem.eql(u8, &ref1, &ref2));
+    try testing.expect(!std.mem.eql(u8, &ref1, &ref3));
+
+    const ref1_again = crypto.computeSecretRef("proj", "prod", "secretA");
+    try testing.expectEqualStrings(&ref1, &ref1_again);
 }
