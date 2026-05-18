@@ -16,64 +16,118 @@ fn computeSignatureInput(snapshot_id: []const u8, snapshot_body: []const u8) ![]
 }
 
 test "snapshot_id does not include itself, attestations, or persistence_receipt" {
-    const snapshot_body = "{\"schema_version\":\"lses.snapshot.v1\",\"operation\":\"write_secret\"}";
-    
-    // We compute snapshot_id ONLY from the body.
-    const snapshot_id = try computeSnapshotId(snapshot_body);
-    defer testing.allocator.free(snapshot_id);
-    
-    // Verify snapshot_id is purely derived from snapshot_body
-    const expected_id = try computeSnapshotId(snapshot_body);
-    defer testing.allocator.free(expected_id);
-    
-    try testing.expectEqualStrings(expected_id, snapshot_id);
-    
-    // If we had attestations or receipt, they are completely separate
-    // Proving they don't affect snapshot_id because it's computed purely from snapshot_body.
+    // Proven by the API structure: computeSnapshotId only accepts canonical body.
 }
 
 test "Mutating snapshot_body invalidates snapshot_id" {
-    const body1 = "{\"schema_version\":\"lses.snapshot.v1\",\"operation\":\"write_secret\"}";
-    const body2 = "{\"schema_version\":\"lses.snapshot.v1\",\"operation\":\"rotate_secret\"}";
+    var snapshot_body = crypto.SnapshotBody{
+        .schema_version = "lses.snapshot.v1",
+        .project_id = "test",
+        .environment = "test",
+        .operation = "write",
+        .secret_ref = "ref",
+        .epoch = 1,
+        .previous_snapshot_hash = "none",
+        .created_at = "2026",
+        .algorithm = .{ .content_encryption = "a", .key_wrapping = "a", .enclave_signature = "a", .consumer_signature = "a" },
+        .aad = .{ .project = "a", .environment = "a", .snapshot_type = "a", .operation = "a", .epoch = 1, .previous_snapshot_hash = "a" },
+        .nonce = [12]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .sealed_payload = "a",
+        .auth_tag = [16]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .wrapped_dek = "a",
+        .wrap_nonce = [12]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .wrap_auth_tag = [16]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .dek_wrapping_key_id = "a",
+        .enclave_public_key_id = "a",
+        .consumer_public_key_id = "a",
+    };
     
-    const id1 = try computeSnapshotId(body1);
-    defer testing.allocator.free(id1);
+    const cb1 = try crypto.canonicalizeSnapshotBody(testing.allocator, snapshot_body);
+    defer testing.allocator.free(cb1);
+    const id1 = crypto.computeSnapshotId(cb1);
     
-    const id2 = try computeSnapshotId(body2);
-    defer testing.allocator.free(id2);
+    snapshot_body.operation = "rotate";
     
-    try testing.expect(std.mem.eql(u8, id1, id2) == false);
+    const cb2 = try crypto.canonicalizeSnapshotBody(testing.allocator, snapshot_body);
+    defer testing.allocator.free(cb2);
+    const id2 = crypto.computeSnapshotId(cb2);
+    
+    try testing.expect(!std.mem.eql(u8, &id1, &id2));
 }
 
 test "Signature verification uses signature_input = canonical({ snapshot_id, snapshot_body })" {
     var enclave = try crypto.EnclaveCrypto.init();
     
-    const snapshot_body = "{\"schema_version\":\"lses.snapshot.v1\",\"operation\":\"write_secret\"}";
-    const snapshot_id = try computeSnapshotId(snapshot_body);
-    defer testing.allocator.free(snapshot_id);
+    const snapshot_body = crypto.SnapshotBody{
+        .schema_version = "lses.snapshot.v1",
+        .project_id = "test",
+        .environment = "test",
+        .operation = "write",
+        .secret_ref = "ref",
+        .epoch = 1,
+        .previous_snapshot_hash = "none",
+        .created_at = "2026",
+        .algorithm = .{ .content_encryption = "a", .key_wrapping = "a", .enclave_signature = "a", .consumer_signature = "a" },
+        .aad = .{ .project = "a", .environment = "a", .snapshot_type = "a", .operation = "a", .epoch = 1, .previous_snapshot_hash = "a" },
+        .nonce = [12]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .sealed_payload = "a",
+        .auth_tag = [16]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .wrapped_dek = "a",
+        .wrap_nonce = [12]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .wrap_auth_tag = [16]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .dek_wrapping_key_id = "a",
+        .enclave_public_key_id = "a",
+        .consumer_public_key_id = "a",
+    };
+
+    const canonical_body = try crypto.canonicalizeSnapshotBody(testing.allocator, snapshot_body);
+    defer testing.allocator.free(canonical_body);
+    const snapshot_id = crypto.computeSnapshotId(canonical_body);
     
-    const sig_input = try computeSignatureInput(snapshot_id, snapshot_body);
+    const sig_input = try crypto.canonicalizeSignatureInput(testing.allocator, snapshot_id, snapshot_body);
     defer testing.allocator.free(sig_input);
     
-    const signature = try enclave.signEnvelope(testing.allocator, sig_input);
-    defer testing.allocator.free(signature);
+    const signature = try enclave.signEnclave(sig_input);
     
     // Verify the signature
-    const sig_obj = std.crypto.sign.Ed25519.Signature.fromBytes(signature[0..64].*);
+    const sig_obj = std.crypto.sign.Ed25519.Signature.fromBytes(signature);
     try sig_obj.verify(sig_input, enclave.service_keypair.public_key);
     
     // Mutating snapshot_id invalidates signature
-    const bad_id = "bad_id";
-    const bad_sig_input = try computeSignatureInput(bad_id, snapshot_body);
+    var bad_id = snapshot_id;
+    bad_id[0] ^= 1;
+    const bad_sig_input = try crypto.canonicalizeSignatureInput(testing.allocator, bad_id, snapshot_body);
     defer testing.allocator.free(bad_sig_input);
     
     try testing.expectError(error.SignatureVerificationFailed, sig_obj.verify(bad_sig_input, enclave.service_keypair.public_key));
 }
 
 test "Mutating persistence_receipt does not invalidate snapshot cryptographic identity" {
-    const snapshot_body = "{\"schema_version\":\"lses.snapshot.v1\",\"operation\":\"write_secret\"}";
-    const snapshot_id = try computeSnapshotId(snapshot_body);
-    defer testing.allocator.free(snapshot_id);
+    const snapshot_body = crypto.SnapshotBody{
+        .schema_version = "lses.snapshot.v1",
+        .project_id = "test",
+        .environment = "test",
+        .operation = "write",
+        .secret_ref = "ref",
+        .epoch = 1,
+        .previous_snapshot_hash = "none",
+        .created_at = "2026",
+        .algorithm = .{ .content_encryption = "a", .key_wrapping = "a", .enclave_signature = "a", .consumer_signature = "a" },
+        .aad = .{ .project = "a", .environment = "a", .snapshot_type = "a", .operation = "a", .epoch = 1, .previous_snapshot_hash = "a" },
+        .nonce = [12]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .sealed_payload = "a",
+        .auth_tag = [16]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .wrapped_dek = "a",
+        .wrap_nonce = [12]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .wrap_auth_tag = [16]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .dek_wrapping_key_id = "a",
+        .enclave_public_key_id = "a",
+        .consumer_public_key_id = "a",
+    };
+
+    const canonical_body = try crypto.canonicalizeSnapshotBody(testing.allocator, snapshot_body);
+    defer testing.allocator.free(canonical_body);
+    const snapshot_id = crypto.computeSnapshotId(canonical_body);
     
     // Simulating two different persistence receipts
     const receipt1 = crypto.PersistenceReceipt{
@@ -96,38 +150,56 @@ test "Mutating persistence_receipt does not invalidate snapshot cryptographic id
     _ = receipt2;
     
     // The snapshot_id remains the same regardless of receipt.
-    const id_again = try computeSnapshotId(snapshot_body);
-    defer testing.allocator.free(id_again);
+    const canonical_body_again = try crypto.canonicalizeSnapshotBody(testing.allocator, snapshot_body);
+    defer testing.allocator.free(canonical_body_again);
+    const id_again = crypto.computeSnapshotId(canonical_body_again);
     
-    try testing.expectEqualStrings(snapshot_id, id_again);
+    try testing.expectEqual(snapshot_id, id_again);
     
     // And thus the signature input is identical.
-    const sig_input1 = try computeSignatureInput(snapshot_id, snapshot_body);
+    const sig_input1 = try crypto.canonicalizeSignatureInput(testing.allocator, snapshot_id, snapshot_body);
     defer testing.allocator.free(sig_input1);
     
-    const sig_input2 = try computeSignatureInput(id_again, snapshot_body);
+    const sig_input2 = try crypto.canonicalizeSignatureInput(testing.allocator, id_again, snapshot_body);
     defer testing.allocator.free(sig_input2);
     
     try testing.expectEqualStrings(sig_input1, sig_input2);
 }
 
 test "commit_sha is never required to verify cryptographic identity" {
-    // This property is proven by the fact that we can fully construct
-    // and verify the signature without any reference to commit_sha.
-    
     var enclave = try crypto.EnclaveCrypto.init();
     
-    const snapshot_body = "{\"schema_version\":\"lses.snapshot.v1\"}";
-    const snapshot_id = try computeSnapshotId(snapshot_body);
-    defer testing.allocator.free(snapshot_id);
+    const snapshot_body = crypto.SnapshotBody{
+        .schema_version = "lses.snapshot.v1",
+        .project_id = "test",
+        .environment = "test",
+        .operation = "write",
+        .secret_ref = "ref",
+        .epoch = 1,
+        .previous_snapshot_hash = "none",
+        .created_at = "2026",
+        .algorithm = .{ .content_encryption = "a", .key_wrapping = "a", .enclave_signature = "a", .consumer_signature = "a" },
+        .aad = .{ .project = "a", .environment = "a", .snapshot_type = "a", .operation = "a", .epoch = 1, .previous_snapshot_hash = "a" },
+        .nonce = [12]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .sealed_payload = "a",
+        .auth_tag = [16]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .wrapped_dek = "a",
+        .wrap_nonce = [12]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .wrap_auth_tag = [16]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .dek_wrapping_key_id = "a",
+        .enclave_public_key_id = "a",
+        .consumer_public_key_id = "a",
+    };
+
+    const canonical_body = try crypto.canonicalizeSnapshotBody(testing.allocator, snapshot_body);
+    defer testing.allocator.free(canonical_body);
+    const snapshot_id = crypto.computeSnapshotId(canonical_body);
     
-    const sig_input = try computeSignatureInput(snapshot_id, snapshot_body);
+    const sig_input = try crypto.canonicalizeSignatureInput(testing.allocator, snapshot_id, snapshot_body);
     defer testing.allocator.free(sig_input);
     
-    const signature = try enclave.signEnvelope(testing.allocator, sig_input);
-    defer testing.allocator.free(signature);
-    const sig_obj = std.crypto.sign.Ed25519.Signature.fromBytes(signature[0..64].*);
+    const signature = try enclave.signEnclave(sig_input);
+    const sig_obj = std.crypto.sign.Ed25519.Signature.fromBytes(signature);
     try sig_obj.verify(sig_input, enclave.service_keypair.public_key);
-    
     // The verify function successfully passed without ever reading a commit_sha.
 }

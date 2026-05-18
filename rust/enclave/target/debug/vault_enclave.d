@@ -1,0 +1,1 @@
+D:\www\Freelas\PROJETOS_OPENSOURCE\MEUS\@purecore\2factor.digital\vault\rust\enclave\target\debug\vault_enclave.lib: D:\www\Freelas\PROJETOS_OPENSOURCE\MEUS\@purecore\2factor.digital\vault\rust\enclave\src\lib.rs

@@ -1,0 +1,7 @@
+[package]
+name = "vault-orchestrator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Dependencies are linked via FFI from Zig and Enclave

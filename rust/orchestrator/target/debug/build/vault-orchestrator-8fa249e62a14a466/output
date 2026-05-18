@@ -1,0 +1,9 @@
+cargo:rustc-link-search=native=../../../
+cargo:rustc-link-lib=static=fast_buffer
+cargo:rustc-link-search=native=../enclave/target/debug
+cargo:rustc-link-lib=static=vault_enclave
+cargo:rustc-link-lib=ntdll
+cargo:rustc-link-lib=bcrypt
+cargo:rustc-link-lib=advapi32
+cargo:rerun-if-changed=../../../fast_buffer.lib
+cargo:rerun-if-changed=../enclave/target/debug/vault_enclave.lib

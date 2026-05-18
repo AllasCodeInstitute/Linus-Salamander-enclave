@@ -27,10 +27,10 @@ pub const GitSync = struct {
     }
 
     fn runGit(self: *GitSync, args: []const []const u8) !void {
-        var full_args = std.ArrayList([]const u8).init(self.allocator);
-        defer full_args.deinit();
-        try full_args.append("git");
-        for (args) |arg| try full_args.append(arg);
+        var full_args = std.ArrayList([]const u8).empty;
+        defer full_args.deinit(self.allocator);
+        try full_args.append(self.allocator, "git");
+        for (args) |arg| try full_args.append(self.allocator, arg);
 
         var child = std.process.Child.init(full_args.items, self.allocator);
         child.cwd = self.repo_path;
