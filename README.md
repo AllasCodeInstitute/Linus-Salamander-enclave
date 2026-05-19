@@ -1,3 +1,4 @@
+![logo Linus Salamander](https://i.imgur.com/wWwd5q8.png)
 # Linus Salamander Enclave System (LSES)
 
 LSES is a cryptographic secret management engine designed for environments requiring zero local persistence. Unlike traditional secret managers that rely on trusted local storage or disks, LSES operates on a "Purge-on-Write" philosophy. 
@@ -36,3 +37,5 @@ GitHub never defines cryptographic validity.
 
 ---
 *LSES reduces disk-based forensic exposure by avoiding local plaintext persistence. Runtime memory attacks remain in scope unless hardware-backed isolation is enabled. When hardware enclaves are unavailable, LSES mitigates unauthorized access through encrypted snapshots, dual signatures, and replay guards. This does not replace hardware-backed memory isolation.*
+
+<img src="https://i.imgur.com/eodldQK.png" style="width: 300px;" />

@@ -478,7 +478,7 @@ pub fn computeNonceKey(
     nonce: [12]u8,
 ) [32]u8 {
     var h = std.crypto.hash.sha2.Sha256.init(.{});
-    h.update("LSES-NONCE-V1");
+    h.update("LSES-NONCE-KEY-V1");
     h.update(if (kind == .payload) "payload" else "dek_wrap");
     h.update(context);
     h.update(&nonce);
