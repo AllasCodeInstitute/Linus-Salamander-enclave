@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "open_edge_packet_security_1780209059035124678",
+  "category": "QuarkBehaviors",
+  "function_name": "open_edge_packet",
+  "test_kind": "security",
+  "status": "passed",
+  "iterations": 8,
+  "wall_ns": 1066691,
+  "executions_per_second": 7499.828910,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 4108288,
+  "ram_bytes_end": 4108288,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 4108288,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

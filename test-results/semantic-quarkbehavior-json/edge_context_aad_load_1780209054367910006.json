@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "edge_context_aad_load_1780209054367910006",
+  "category": "QuarkBehaviors",
+  "function_name": "edge_context_aad",
+  "test_kind": "load",
+  "status": "passed",
+  "iterations": 16,
+  "wall_ns": 262229,
+  "executions_per_second": 61015.372060,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 4030464,
+  "ram_bytes_end": 4030464,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 4030464,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

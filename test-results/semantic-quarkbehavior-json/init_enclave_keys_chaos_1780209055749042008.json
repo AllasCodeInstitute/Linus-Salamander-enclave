@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "init_enclave_keys_chaos_1780209055749042008",
+  "category": "QuarkBehaviors",
+  "function_name": "init_enclave_keys",
+  "test_kind": "chaos",
+  "status": "passed",
+  "iterations": 8,
+  "wall_ns": 75817347,
+  "executions_per_second": 105.516749,
+  "cpu_seconds_total": 0.070000000,
+  "cpu_seconds_per_execution": 0.008750000000,
+  "ram_bytes_start": 4063232,
+  "ram_bytes_end": 4067328,
+  "ram_bytes_per_execution": 512,
+  "ram_bytes_max": 4067328,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

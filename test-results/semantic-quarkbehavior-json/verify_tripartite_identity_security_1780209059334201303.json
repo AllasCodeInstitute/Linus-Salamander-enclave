@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "verify_tripartite_identity_security_1780209059334201303",
+  "category": "QuarkBehaviors",
+  "function_name": "verify_tripartite_identity",
+  "test_kind": "security",
+  "status": "passed",
+  "iterations": 8,
+  "wall_ns": 314348,
+  "executions_per_second": 25449.501826,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 4169728,
+  "ram_bytes_end": 4169728,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 4169728,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

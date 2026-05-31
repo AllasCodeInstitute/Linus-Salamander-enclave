@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "init_pqc_session_stress_1780209056689915862",
+  "category": "QuarkBehaviors",
+  "function_name": "init_pqc_session",
+  "test_kind": "stress",
+  "status": "passed",
+  "iterations": 64,
+  "wall_ns": 928993,
+  "executions_per_second": 68891.800046,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 4067328,
+  "ram_bytes_end": 4067328,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 4067328,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

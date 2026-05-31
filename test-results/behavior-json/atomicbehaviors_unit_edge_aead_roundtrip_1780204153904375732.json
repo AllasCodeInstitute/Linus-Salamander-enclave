@@ -1,0 +1,18 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "atomicbehaviors_unit_edge_aead_roundtrip_1780204153904375732",
+  "category": "AtomicBehaviors",
+  "test_kind": "unit",
+  "scope": "functionality",
+  "name": "edge_aead_roundtrip",
+  "status": "passed",
+  "duration_ns": 126963,
+  "narrative": "Validates the AEAD envelope functionality across seal and open APIs.",
+  "metrics": [
+    { "name": "frame_len", "value": "54", "unit": "bytes" }
+  ],
+  "assertions": [
+    { "name": "opened plaintext matches input", "passed": true },
+    { "name": "ciphertext differs from plaintext", "passed": true }
+  ]
+}

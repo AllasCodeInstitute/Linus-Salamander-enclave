@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "verify_pqc_handshake_benchmark_1780209059229149367",
+  "category": "QuarkBehaviors",
+  "function_name": "verify_pqc_handshake",
+  "test_kind": "benchmark",
+  "status": "passed",
+  "iterations": 128,
+  "wall_ns": 3160101,
+  "executions_per_second": 40505.034491,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 4120576,
+  "ram_bytes_end": 4120576,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 4120576,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}
