@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LSES Behavior Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            enclave: {
+              bg: '#050816', panel: '#0b1024', border: '#1e2a4d', cyan: '#22d3ee', violet: '#8b5cf6', green: '#22c55e', amber: '#f59e0b', red: '#ef4444'
+            }
+          },
+          boxShadow: { glow: '0 0 35px rgba(34,211,238,.18)' }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background: radial-gradient(circle at top left, rgba(34,211,238,.16), transparent 32rem), radial-gradient(circle at bottom right, rgba(139,92,246,.18), transparent 36rem), #050816; }
+    .glass { background: rgba(11,16,36,.78); backdrop-filter: blur(16px); border: 1px solid rgba(148,163,184,.16); }
+    .terminal-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+    .terminal-scroll::-webkit-scrollbar-thumb { background: #1e2a4d; border-radius: 999px; }
+  </style>
+</head>
+<body class="min-h-screen text-slate-100">
+  <header class="sticky top-0 z-30 border-b border-enclave-border/80 bg-enclave-bg/80 backdrop-blur-xl">
+    <div class="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between">
+      <div class="flex items-center gap-4">
+        <div class="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-enclave-cyan to-enclave-violet shadow-glow animate__animated animate__pulse animate__infinite">
+          <span class="text-xl font-black">LS</span>
+        </div>
+        <div>
+          <h1 class="text-2xl font-black tracking-tight">LSES Behavior Dashboard</h1>
+          <p class="text-sm text-slate-400">QuarkBehaviors · AtomicBehaviors · Project Intents</p>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <button id="reloadBtn" class="rounded-xl border border-enclave-border px-4 py-2 font-semibold text-slate-200 hover:border-enclave-cyan hover:text-enclave-cyan">Recarregar JSON</button>
+        <label class="cursor-pointer rounded-xl bg-enclave-cyan px-4 py-2 font-bold text-slate-950 hover:bg-cyan-300">
+          Importar JSONs
+          <input id="fileInput" type="file" accept="application/json,.json" multiple class="hidden" />
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-5 py-6 lg:grid-cols-[280px_1fr]">
+    <aside class="glass h-max rounded-3xl p-4 shadow-glow">
+      <div class="mb-4 text-xs font-bold uppercase tracking-[.24em] text-slate-500">Menu</div>
+      <nav id="menu" class="space-y-2"></nav>
+      <div class="mt-6 rounded-2xl border border-enclave-border bg-slate-950/40 p-4">
+        <div class="text-xs uppercase tracking-wider text-slate-500">Fonte</div>
+        <div id="sourceLabel" class="mt-1 break-all text-sm text-slate-300">test-results/behavior-json/manifest.json</div>
+      </div>
+    </aside>
+
+    <section class="space-y-6">
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-4" id="summaryCards"></div>
+      <div class="glass rounded-3xl p-5 shadow-glow">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 id="sectionTitle" class="text-2xl font-black">QuarkBehaviors</h2>
+            <p id="sectionSubtitle" class="text-sm text-slate-400">Resultados por função</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <input id="searchBox" class="rounded-xl border border-enclave-border bg-slate-950/70 px-4 py-2 text-sm outline-none focus:border-enclave-cyan" placeholder="Filtrar por nome, tipo, status..." />
+            <select id="kindFilter" class="rounded-xl border border-enclave-border bg-slate-950/70 px-4 py-2 text-sm outline-none focus:border-enclave-cyan">
+              <option value="all">todos</option>
+              <option value="unit">unit</option>
+              <option value="load">load</option>
+              <option value="stress">stress</option>
+              <option value="chaos">chaos</option>
+              <option value="security">security</option>
+              <option value="benchmark">benchmark</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div id="resultsGrid" class="grid grid-cols-1 gap-4 xl:grid-cols-2"></div>
+      <div id="emptyState" class="hidden rounded-3xl border border-dashed border-enclave-border p-12 text-center text-slate-400">Nenhum JSON encontrado para esta seção.</div>
+    </section>
+  </main>
+
+  <template id="cardTemplate">
+    <article class="glass animate__animated animate__fadeInUp rounded-3xl p-5 shadow-glow transition hover:-translate-y-1 hover:border-enclave-cyan/60">
+      <div class="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <div class="mb-2 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-wider">
+            <span data-kind class="rounded-full bg-enclave-violet/20 px-2 py-1 text-violet-200"></span>
+            <span data-scope class="rounded-full bg-enclave-cyan/20 px-2 py-1 text-cyan-200"></span>
+          </div>
+          <h3 data-name class="text-lg font-black"></h3>
+          <p data-narrative class="mt-1 text-sm leading-6 text-slate-400"></p>
+        </div>
+        <span data-status class="rounded-full px-3 py-1 text-xs font-black"></span>
+      </div>
+      <div class="mb-4 grid grid-cols-2 gap-3" data-metrics></div>
+      <div class="space-y-2" data-assertions></div>
+      <details class="mt-4 rounded-2xl border border-enclave-border bg-slate-950/40 p-3">
+        <summary class="cursor-pointer text-xs font-bold uppercase tracking-wider text-slate-400">JSON bruto</summary>
+        <pre data-json class="terminal-scroll mt-3 max-h-72 overflow-auto whitespace-pre-wrap text-xs text-cyan-100"></pre>
+      </details>
+    </article>
+  </template>
+
+  <script>
+    const categories = {
+      QuarkBehaviors: { label: 'QuarkBehaviors', subtitle: 'Interface rica com todos os JSONs das funções.' },
+      AtomicBehaviors: { label: 'AtomicBehaviors', subtitle: 'Interface rica com todos os JSONs das funcionalidades.' },
+      Project: { label: 'Project', subtitle: 'Renderização dos testes compostos de Intents.' }
+    };
+
+    let activeCategory = 'QuarkBehaviors';
+    let results = [];
+
+    const menu = document.getElementById('menu');
+    const grid = document.getElementById('resultsGrid');
+    const summaryCards = document.getElementById('summaryCards');
+    const emptyState = document.getElementById('emptyState');
+    const sectionTitle = document.getElementById('sectionTitle');
+    const sectionSubtitle = document.getElementById('sectionSubtitle');
+    const searchBox = document.getElementById('searchBox');
+    const kindFilter = document.getElementById('kindFilter');
+    const sourceLabel = document.getElementById('sourceLabel');
+
+    function setMenu() {
+      menu.innerHTML = '';
+      Object.values(categories).forEach(item => {
+        const button = document.createElement('button');
+        button.className = `w-full rounded-2xl px-4 py-3 text-left font-bold transition ${activeCategory === item.label ? 'bg-gradient-to-r from-enclave-cyan to-enclave-violet text-slate-950' : 'text-slate-300 hover:bg-slate-800/70'}`;
+        button.textContent = item.label;
+        button.onclick = () => { activeCategory = item.label; render(); };
+        menu.appendChild(button);
+      });
+    }
+
+    async function loadFromManifest() {
+      sourceLabel.textContent = 'test-results/behavior-json/manifest.json';
+      const manifest = await fetch('test-results/behavior-json/manifest.json', { cache: 'no-store' }).then(r => r.json());
+      const loaded = await Promise.all(manifest.files.map(file => fetch(`test-results/behavior-json/${file}`, { cache: 'no-store' }).then(r => r.json())));
+      results = loaded;
+      render();
+    }
+
+    function durationMs(ns) { return Number(ns || 0) / 1_000_000; }
+    function statusClass(status) { return status === 'passed' ? 'bg-enclave-green/20 text-green-200' : 'bg-enclave-red/20 text-red-200'; }
+
+    function renderSummary(filtered) {
+      const passed = filtered.filter(item => item.status === 'passed').length;
+      const avg = filtered.length ? filtered.reduce((sum, item) => sum + durationMs(item.duration_ns), 0) / filtered.length : 0;
+      const assertions = filtered.flatMap(item => item.assertions || []);
+      const assertionPass = assertions.filter(item => item.passed).length;
+      const cards = [
+        ['Resultados', filtered.length, 'JSONs'],
+        ['Passou', passed, 'tests'],
+        ['Assertions', `${assertionPass}/${assertions.length}`, 'checks'],
+        ['Média', avg.toFixed(3), 'ms']
+      ];
+      summaryCards.innerHTML = cards.map(([title, value, unit]) => `
+        <div class="glass animate__animated animate__fadeIn rounded-3xl p-5 shadow-glow">
+          <div class="text-xs font-bold uppercase tracking-widest text-slate-500">${title}</div>
+          <div class="mt-2 text-3xl font-black text-white">${value}</div>
+          <div class="text-sm text-slate-400">${unit}</div>
+        </div>`).join('');
+    }
+
+    function render() {
+      setMenu();
+      const category = categories[activeCategory];
+      sectionTitle.textContent = category.label;
+      sectionSubtitle.textContent = category.subtitle;
+      const term = searchBox.value.trim().toLowerCase();
+      const kind = kindFilter.value;
+      const filtered = results
+        .filter(item => item.category === activeCategory)
+        .filter(item => kind === 'all' || item.test_kind === kind)
+        .filter(item => !term || JSON.stringify(item).toLowerCase().includes(term));
+      renderSummary(filtered);
+      grid.innerHTML = '';
+      emptyState.classList.toggle('hidden', filtered.length !== 0);
+      filtered.sort((a, b) => `${a.test_kind}:${a.name}`.localeCompare(`${b.test_kind}:${b.name}`)).forEach(item => {
+        const template = document.getElementById('cardTemplate').content.cloneNode(true);
+        template.querySelector('[data-kind]').textContent = item.test_kind;
+        template.querySelector('[data-scope]').textContent = item.scope;
+        template.querySelector('[data-name]').textContent = item.name;
+        template.querySelector('[data-narrative]').textContent = item.narrative;
+        const status = template.querySelector('[data-status]');
+        status.textContent = item.status;
+        status.className += ` ${statusClass(item.status)}`;
+        template.querySelector('[data-metrics]').innerHTML = (item.metrics || []).map(metric => `
+          <div class="rounded-2xl border border-enclave-border bg-slate-950/50 p-3">
+            <div class="text-[10px] uppercase tracking-wider text-slate-500">${metric.name}</div>
+            <div class="mt-1 text-lg font-black text-enclave-cyan">${metric.value}</div>
+            <div class="text-xs text-slate-500">${metric.unit}</div>
+          </div>`).join('');
+        template.querySelector('[data-assertions]').innerHTML = (item.assertions || []).map(assertion => `
+          <div class="flex items-center justify-between rounded-xl bg-slate-950/40 px-3 py-2 text-sm">
+            <span>${assertion.name}</span>
+            <span class="font-black ${assertion.passed ? 'text-enclave-green' : 'text-enclave-red'}">${assertion.passed ? 'PASS' : 'FAIL'}</span>
+          </div>`).join('');
+        template.querySelector('[data-json]').textContent = JSON.stringify(item, null, 2);
+        grid.appendChild(template);
+      });
+    }
+
+    document.getElementById('reloadBtn').onclick = () => loadFromManifest().catch(err => alert(`Não foi possível carregar via fetch. Use um servidor local ou importe os JSONs. Detalhe: ${err.message}`));
+    searchBox.oninput = render;
+    kindFilter.onchange = render;
+    document.getElementById('fileInput').onchange = async event => {
+      const files = Array.from(event.target.files || []);
+      sourceLabel.textContent = `${files.length} arquivo(s) importados pelo usuário`;
+      results = (await Promise.all(files.map(file => file.text().then(JSON.parse)))).filter(item => item.schema === 'lses.behavior.result.v1');
+      render();
+    };
+
+    loadFromManifest().catch(() => {
+      sourceLabel.textContent = 'Aguardando importação manual dos JSONs ou servidor local.';
+      results = [];
+      render();
+    });
+  </script>
+</body>
+</html>
