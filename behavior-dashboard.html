@@ -140,12 +140,36 @@
       });
     }
 
+    async function loadManifestAt(basePath) {
+      const manifest = await fetch(`${basePath}/manifest.json`, { cache: 'no-store' }).then(r => r.json());
+      return Promise.all(manifest.files.map(file => fetch(`${basePath}/${file}`, { cache: 'no-store' }).then(r => r.json())));
+    }
+
     async function loadFromManifest() {
-      sourceLabel.textContent = 'test-results/behavior-json/manifest.json';
-      const manifest = await fetch('test-results/behavior-json/manifest.json', { cache: 'no-store' }).then(r => r.json());
-      const loaded = await Promise.all(manifest.files.map(file => fetch(`test-results/behavior-json/${file}`, { cache: 'no-store' }).then(r => r.json())));
-      results = loaded;
+      const sources = ['test-results/behavior-json', 'test-results/semantic-quarkbehavior-json'];
+      sourceLabel.textContent = sources.map(source => `${source}/manifest.json`).join(' + ');
+      const batches = await Promise.all(sources.map(source => loadManifestAt(source).catch(() => [])));
+      results = batches.flat().map(normalizeResult);
       render();
+    }
+
+
+    function normalizeResult(item) {
+      if (item.schema !== 'lses.semantic.quarkbehavior.result.v1') return item;
+      return {
+        ...item,
+        scope: 'function',
+        name: item.function_name,
+        duration_ns: item.wall_ns,
+        narrative: `Modular QuarkBehavior for ${item.function_name} (${item.test_kind}) with CPU/RAM benchmark telemetry.`,
+        metrics: [
+          { name: 'iterations', value: String(item.iterations), unit: 'count' },
+          { name: 'exec/s', value: Number(item.executions_per_second || 0).toFixed(2), unit: 'ops/s' },
+          { name: 'cpu/exec', value: Number(item.cpu_seconds_per_execution || 0).toExponential(3), unit: 's' },
+          { name: 'ram/exec', value: String(item.ram_bytes_per_execution || 0), unit: 'bytes' },
+          { name: 'ram max', value: String(item.ram_bytes_max || 0), unit: 'bytes' }
+        ]
+      };
     }
 
     function durationMs(ns) { return Number(ns || 0) / 1_000_000; }

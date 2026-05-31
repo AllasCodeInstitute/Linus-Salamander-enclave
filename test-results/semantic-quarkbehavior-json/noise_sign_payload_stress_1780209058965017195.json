@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "noise_sign_payload_stress_1780209058965017195",
+  "category": "QuarkBehaviors",
+  "function_name": "noise_sign_payload",
+  "test_kind": "stress",
+  "status": "passed",
+  "iterations": 64,
+  "wall_ns": 606380056,
+  "executions_per_second": 105.544368,
+  "cpu_seconds_total": 0.600000000,
+  "cpu_seconds_per_execution": 0.009375000000,
+  "ram_bytes_start": 4108288,
+  "ram_bytes_end": 4116480,
+  "ram_bytes_per_execution": 128,
+  "ram_bytes_max": 4116480,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

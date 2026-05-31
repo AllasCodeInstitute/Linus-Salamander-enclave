@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "verify_pqc_handshake_stress_1780209059278638963",
+  "category": "QuarkBehaviors",
+  "function_name": "verify_pqc_handshake",
+  "test_kind": "stress",
+  "status": "passed",
+  "iterations": 64,
+  "wall_ns": 1184135,
+  "executions_per_second": 54047.891499,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 4128768,
+  "ram_bytes_end": 4128768,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 4128768,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

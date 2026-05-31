@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "state_chaos_1780209059175644489",
+  "category": "QuarkBehaviors",
+  "function_name": "state",
+  "test_kind": "chaos",
+  "status": "passed",
+  "iterations": 8,
+  "wall_ns": 119897,
+  "executions_per_second": 66723.938047,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 4116480,
+  "ram_bytes_end": 4116480,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 4116480,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

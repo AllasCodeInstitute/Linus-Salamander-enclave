@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "state_load_1780209059187676030",
+  "category": "QuarkBehaviors",
+  "function_name": "state",
+  "test_kind": "load",
+  "status": "passed",
+  "iterations": 16,
+  "wall_ns": 230290,
+  "executions_per_second": 69477.615181,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 4120576,
+  "ram_bytes_end": 4120576,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 4120576,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

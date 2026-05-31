@@ -81,335 +81,31 @@ impl EnclaveState {
 
 static STATE: OnceLock<Mutex<EnclaveState>> = OnceLock::new();
 
-fn state() -> &'static Mutex<EnclaveState> {
-    STATE.get_or_init(|| Mutex::new(EnclaveState::new()))
-}
+include!("../../semantic-behaviors-types/quarkbehaviors/state/proccess.rs");
 
-#[no_mangle]
-pub extern "C" fn init_pqc_session(session_id: u64, out_pubkey: *mut u8) -> i32 {
-    if out_pubkey.is_null() {
-        return ERR_NULL_POINTER;
-    }
+include!("../../semantic-behaviors-types/quarkbehaviors/init_pqc_session/proccess.rs");
 
-    let mut guard = match state().lock() {
-        Ok(g) => g,
-        Err(_) => return ERR_STATE,
-    };
+include!("../../semantic-behaviors-types/quarkbehaviors/verify_pqc_handshake/proccess.rs");
 
-    guard.pqc_sessions[0] = Some(PQCSession {
-        session_id,
-        shared_secret: [0u8; 32],
-        is_quantum_resistant: true,
-    });
+include!("../../semantic-behaviors-types/quarkbehaviors/init_enclave_keys/proccess.rs");
 
-    unsafe { core::ptr::write_bytes(out_pubkey, 0xAA, 1184) };
-    0
-}
+include!("../../semantic-behaviors-types/quarkbehaviors/generate_agent_key/proccess.rs");
 
-#[no_mangle]
-pub extern "C" fn verify_pqc_handshake(session_id: u64, _peer_ciphertext: *const u8) -> i32 {
-    let guard = match state().lock() {
-        Ok(g) => g,
-        Err(_) => return ERR_STATE,
-    };
+include!("../../semantic-behaviors-types/quarkbehaviors/verify_tripartite_identity/proccess.rs");
 
-    if let Some(session) = guard.pqc_sessions[0] {
-        if session.session_id == session_id {
-            return 0;
-        }
-    }
-    ERR_AUTHENTICATION
-}
+include!("../../semantic-behaviors-types/quarkbehaviors/derive_edge_key/proccess.rs");
 
-#[no_mangle]
-pub extern "C" fn init_enclave_keys() {
-    if let Ok(mut guard) = state().lock() {
-        guard.signing_key = Some(SigningKey::generate(&mut OsRng));
-        guard.replay_bitmap = [0; 1024];
-        guard.root_seed = ROOT_SEED_DEFAULT;
-    }
-}
+include!("../../semantic-behaviors-types/quarkbehaviors/edge_context_aad/proccess.rs");
 
-#[no_mangle]
-pub extern "C" fn generate_agent_key(
-    name: *const u8,
-    name_len: usize,
-    caps: *const u8,
-    caps_len: usize,
-    plane: *const u8,
-    plane_len: usize,
-    semantics: *const u8,
-    semantics_len: usize,
-    out_key: *mut u8,
-) -> i32 {
-    if name.is_null()
-        || caps.is_null()
-        || plane.is_null()
-        || semantics.is_null()
-        || out_key.is_null()
-    {
-        return ERR_NULL_POINTER;
-    }
+include!("../../semantic-behaviors-types/quarkbehaviors/mark_replay_and_get_root_seed/proccess.rs");
 
-    let guard = match state().lock() {
-        Ok(g) => g,
-        Err(_) => return ERR_STATE,
-    };
+include!("../../semantic-behaviors-types/quarkbehaviors/seal_edge_packet/proccess.rs");
 
-    let mut hasher = Sha256::new();
-    hasher.update(guard.root_seed);
-    hasher.update(unsafe { core::slice::from_raw_parts(name, name_len) });
-    hasher.update(unsafe { core::slice::from_raw_parts(caps, caps_len) });
-    hasher.update(unsafe { core::slice::from_raw_parts(plane, plane_len) });
-    hasher.update(unsafe { core::slice::from_raw_parts(semantics, semantics_len) });
+include!("../../semantic-behaviors-types/quarkbehaviors/open_edge_packet/proccess.rs");
 
-    let result = hasher.finalize();
-    unsafe { core::ptr::copy_nonoverlapping(result.as_ptr(), out_key, 32) };
-    0
-}
+include!("../../semantic-behaviors-types/quarkbehaviors/choreograph_packet/proccess.rs");
 
-#[no_mangle]
-pub extern "C" fn verify_tripartite_identity(
-    id: *const TripartiteIdentity,
-    expected_hash: *const u8,
-) -> i32 {
-    if id.is_null() || expected_hash.is_null() {
-        return ERR_NULL_POINTER;
-    }
-
-    let identity = unsafe { &*id };
-    let mut hasher = Sha256::new();
-    hasher.update(identity.pub_key);
-    hasher.update(identity.mac_addr);
-    hasher.update(identity.ip_addr);
-
-    let result = hasher.finalize();
-    let expected = unsafe { core::slice::from_raw_parts(expected_hash, 32) };
-    if result.as_slice() == expected {
-        0
-    } else {
-        ERR_AUTHENTICATION
-    }
-}
-
-fn derive_edge_key(ctx: &EdgeContext, root_seed: &[u8; 32]) -> [u8; 32] {
-    let mut mac =
-        <HmacSha256 as Mac>::new_from_slice(root_seed).expect("HMAC accepts any key size");
-    mac.update(&ctx.intent_id.to_le_bytes());
-    mac.update(&ctx.edge_id.to_le_bytes());
-    mac.update(&ctx.sequence.to_le_bytes());
-    let result = mac.finalize();
-    let mut key = [0u8; 32];
-    key.copy_from_slice(&result.into_bytes()[..32]);
-    key
-}
-
-fn edge_context_aad(ctx: &EdgeContext) -> [u8; 24] {
-    let mut aad = [0u8; 24];
-    aad[0..8].copy_from_slice(&ctx.intent_id.to_le_bytes());
-    aad[8..16].copy_from_slice(&ctx.edge_id.to_le_bytes());
-    aad[16..24].copy_from_slice(&ctx.sequence.to_le_bytes());
-    aad
-}
-
-fn mark_replay_and_get_root_seed(session_id: u64) -> Result<[u8; 32], i32> {
-    let mut guard = state().lock().map_err(|_| ERR_STATE)?;
-    if !guard.try_mark_replay(session_id) {
-        return Err(ERR_REPLAY);
-    }
-    Ok(guard.root_seed)
-}
-
-#[no_mangle]
-pub extern "C" fn seal_edge_packet(
-    plaintext_ptr: *const u8,
-    plaintext_len: usize,
-    ctx: *const EdgeContext,
-    session_id: u64,
-    out_frame: *mut u8,
-    out_frame_capacity: usize,
-    out_frame_len: *mut usize,
-) -> i32 {
-    if (plaintext_ptr.is_null() && plaintext_len != 0)
-        || ctx.is_null()
-        || out_frame.is_null()
-        || out_frame_len.is_null()
-    {
-        return ERR_NULL_POINTER;
-    }
-
-    let required_len = match plaintext_len.checked_add(AEAD_OVERHEAD) {
-        Some(len) => len,
-        None => return ERR_BUFFER_TOO_SMALL,
-    };
-    if out_frame_capacity < required_len {
-        return ERR_BUFFER_TOO_SMALL;
-    }
-
-    let edge = unsafe { &*ctx };
-    let root_seed = match mark_replay_and_get_root_seed(session_id) {
-        Ok(seed) => seed,
-        Err(code) => return code,
-    };
-    let key = derive_edge_key(edge, &root_seed);
-    let cipher = match Aes256Gcm::new_from_slice(&key) {
-        Ok(cipher) => cipher,
-        Err(_) => return ERR_CRYPTO,
-    };
-
-    let mut nonce = [0u8; AEAD_NONCE_LEN];
-    OsRng.fill_bytes(&mut nonce);
-    let aad = edge_context_aad(edge);
-    let plaintext = if plaintext_len == 0 {
-        &[]
-    } else {
-        unsafe { core::slice::from_raw_parts(plaintext_ptr, plaintext_len) }
-    };
-    let mut ciphertext = plaintext.to_vec();
-    let tag =
-        match cipher.encrypt_in_place_detached(Nonce::from_slice(&nonce), &aad, &mut ciphertext) {
-            Ok(tag) => tag,
-            Err(_) => return ERR_CRYPTO,
-        };
-
-    unsafe {
-        core::ptr::copy_nonoverlapping(nonce.as_ptr(), out_frame, AEAD_NONCE_LEN);
-        core::ptr::copy_nonoverlapping(
-            ciphertext.as_ptr(),
-            out_frame.add(AEAD_NONCE_LEN),
-            plaintext_len,
-        );
-        core::ptr::copy_nonoverlapping(
-            tag.as_ptr(),
-            out_frame.add(AEAD_NONCE_LEN + plaintext_len),
-            AEAD_TAG_LEN,
-        );
-        *out_frame_len = required_len;
-    }
-
-    0
-}
-
-#[no_mangle]
-pub extern "C" fn open_edge_packet(
-    frame_ptr: *const u8,
-    frame_len: usize,
-    ctx: *const EdgeContext,
-    session_id: u64,
-    out_plaintext: *mut u8,
-    out_plaintext_capacity: usize,
-    out_plaintext_len: *mut usize,
-) -> i32 {
-    if frame_ptr.is_null()
-        || ctx.is_null()
-        || out_plaintext.is_null()
-        || out_plaintext_len.is_null()
-    {
-        return ERR_NULL_POINTER;
-    }
-    if frame_len < AEAD_OVERHEAD {
-        return ERR_AUTHENTICATION;
-    }
-
-    let plaintext_len = frame_len - AEAD_OVERHEAD;
-    if out_plaintext_capacity < plaintext_len {
-        return ERR_BUFFER_TOO_SMALL;
-    }
-
-    let edge = unsafe { &*ctx };
-    let root_seed = match mark_replay_and_get_root_seed(session_id) {
-        Ok(seed) => seed,
-        Err(code) => return code,
-    };
-    let key = derive_edge_key(edge, &root_seed);
-    let cipher = match Aes256Gcm::new_from_slice(&key) {
-        Ok(cipher) => cipher,
-        Err(_) => return ERR_CRYPTO,
-    };
-
-    let frame = unsafe { core::slice::from_raw_parts(frame_ptr, frame_len) };
-    let nonce = Nonce::from_slice(&frame[..AEAD_NONCE_LEN]);
-    let tag = aes_gcm::Tag::from_slice(&frame[AEAD_NONCE_LEN + plaintext_len..]);
-    let aad = edge_context_aad(edge);
-    let mut plaintext = frame[AEAD_NONCE_LEN..AEAD_NONCE_LEN + plaintext_len].to_vec();
-
-    if cipher
-        .decrypt_in_place_detached(nonce, &aad, &mut plaintext, tag)
-        .is_err()
-    {
-        return ERR_AUTHENTICATION;
-    }
-
-    unsafe {
-        core::ptr::copy_nonoverlapping(plaintext.as_ptr(), out_plaintext, plaintext_len);
-        *out_plaintext_len = plaintext_len;
-    }
-
-    0
-}
-
-#[no_mangle]
-pub extern "C" fn choreograph_packet(
-    payload_ptr: *mut u8,
-    len: usize,
-    in_ctx: *const EdgeContext,
-    out_ctx: *const EdgeContext,
-    session_id: u64,
-) -> i32 {
-    if payload_ptr.is_null() || in_ctx.is_null() || out_ctx.is_null() {
-        return ERR_NULL_POINTER;
-    }
-
-    let mut guard = match state().lock() {
-        Ok(g) => g,
-        Err(_) => return ERR_STATE,
-    };
-
-    if !guard.try_mark_replay(session_id) {
-        return ERR_REPLAY;
-    }
-
-    let in_edge = unsafe { &*in_ctx };
-    let out_edge = unsafe { &*out_ctx };
-    let key_in = derive_edge_key(in_edge, &guard.root_seed);
-    let key_out = derive_edge_key(out_edge, &guard.root_seed);
-
-    let data = unsafe { core::slice::from_raw_parts_mut(payload_ptr, len) };
-    for (i, b) in data.iter_mut().enumerate() {
-        *b ^= key_in[i % 32] ^ key_out[i % 32];
-    }
-
-    0
-}
-
-#[no_mangle]
-pub extern "C" fn noise_sign_payload(
-    payload_ptr: *const u8,
-    len: usize,
-    out_sig: *mut u8,
-    session_id: u64,
-) -> i32 {
-    if payload_ptr.is_null() || out_sig.is_null() {
-        return ERR_NULL_POINTER;
-    }
-
-    let mut guard = match state().lock() {
-        Ok(g) => g,
-        Err(_) => return ERR_STATE,
-    };
-
-    if !guard.try_mark_replay(session_id) {
-        return ERR_REPLAY;
-    }
-
-    let payload = unsafe { core::slice::from_raw_parts(payload_ptr, len) };
-    if let Some(sk) = &guard.signing_key {
-        let signature = sk.sign(payload);
-        unsafe { core::ptr::copy_nonoverlapping(signature.to_bytes().as_ptr(), out_sig, 64) };
-        return 0;
-    }
-    ERR_STATE
-}
+include!("../../semantic-behaviors-types/quarkbehaviors/noise_sign_payload/proccess.rs");
 
 #[cfg(test)]
 mod tests {
@@ -1253,5 +949,639 @@ mod tests {
             &assertions,
             "Benchmarks the complete project-level Intent composition path.",
         );
+    }
+}
+
+#[cfg(test)]
+mod modular_quarkbehavior_tests {
+    use super::*;
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        sync::Mutex,
+        time::{Instant, SystemTime, UNIX_EPOCH},
+    };
+
+    static MODULAR_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    mod state_load {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/state/tests.load.rs");
+    }
+    mod state_stress {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/state/tests.stress.rs");
+    }
+    mod state_chaos {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/state/tests.chaos.rs");
+    }
+    mod state_security {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/state/tests.security.rs");
+    }
+    mod state_benchmark {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/state/benchmark.rs");
+    }
+    mod init_pqc_session_load {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/init_pqc_session/tests.load.rs");
+    }
+    mod init_pqc_session_stress {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/init_pqc_session/tests.stress.rs");
+    }
+    mod init_pqc_session_chaos {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/init_pqc_session/tests.chaos.rs");
+    }
+    mod init_pqc_session_security {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/init_pqc_session/tests.security.rs"
+        );
+    }
+    mod init_pqc_session_benchmark {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/init_pqc_session/benchmark.rs");
+    }
+    mod verify_pqc_handshake_load {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/verify_pqc_handshake/tests.load.rs"
+        );
+    }
+    mod verify_pqc_handshake_stress {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/verify_pqc_handshake/tests.stress.rs"
+        );
+    }
+    mod verify_pqc_handshake_chaos {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/verify_pqc_handshake/tests.chaos.rs"
+        );
+    }
+    mod verify_pqc_handshake_security {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/verify_pqc_handshake/tests.security.rs"
+        );
+    }
+    mod verify_pqc_handshake_benchmark {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/verify_pqc_handshake/benchmark.rs");
+    }
+    mod init_enclave_keys_load {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/init_enclave_keys/tests.load.rs");
+    }
+    mod init_enclave_keys_stress {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/init_enclave_keys/tests.stress.rs");
+    }
+    mod init_enclave_keys_chaos {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/init_enclave_keys/tests.chaos.rs");
+    }
+    mod init_enclave_keys_security {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/init_enclave_keys/tests.security.rs"
+        );
+    }
+    mod init_enclave_keys_benchmark {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/init_enclave_keys/benchmark.rs");
+    }
+    mod generate_agent_key_load {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/generate_agent_key/tests.load.rs");
+    }
+    mod generate_agent_key_stress {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/generate_agent_key/tests.stress.rs"
+        );
+    }
+    mod generate_agent_key_chaos {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/generate_agent_key/tests.chaos.rs");
+    }
+    mod generate_agent_key_security {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/generate_agent_key/tests.security.rs"
+        );
+    }
+    mod generate_agent_key_benchmark {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/generate_agent_key/benchmark.rs");
+    }
+    mod verify_tripartite_identity_load {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/verify_tripartite_identity/tests.load.rs");
+    }
+    mod verify_tripartite_identity_stress {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/verify_tripartite_identity/tests.stress.rs");
+    }
+    mod verify_tripartite_identity_chaos {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/verify_tripartite_identity/tests.chaos.rs");
+    }
+    mod verify_tripartite_identity_security {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/verify_tripartite_identity/tests.security.rs");
+    }
+    mod verify_tripartite_identity_benchmark {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/verify_tripartite_identity/benchmark.rs"
+        );
+    }
+    mod derive_edge_key_load {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/derive_edge_key/tests.load.rs");
+    }
+    mod derive_edge_key_stress {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/derive_edge_key/tests.stress.rs");
+    }
+    mod derive_edge_key_chaos {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/derive_edge_key/tests.chaos.rs");
+    }
+    mod derive_edge_key_security {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/derive_edge_key/tests.security.rs");
+    }
+    mod derive_edge_key_benchmark {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/derive_edge_key/benchmark.rs");
+    }
+    mod edge_context_aad_load {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/edge_context_aad/tests.load.rs");
+    }
+    mod edge_context_aad_stress {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/edge_context_aad/tests.stress.rs");
+    }
+    mod edge_context_aad_chaos {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/edge_context_aad/tests.chaos.rs");
+    }
+    mod edge_context_aad_security {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/edge_context_aad/tests.security.rs"
+        );
+    }
+    mod edge_context_aad_benchmark {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/edge_context_aad/benchmark.rs");
+    }
+    mod mark_replay_and_get_root_seed_load {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/mark_replay_and_get_root_seed/tests.load.rs");
+    }
+    mod mark_replay_and_get_root_seed_stress {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/mark_replay_and_get_root_seed/tests.stress.rs");
+    }
+    mod mark_replay_and_get_root_seed_chaos {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/mark_replay_and_get_root_seed/tests.chaos.rs");
+    }
+    mod mark_replay_and_get_root_seed_security {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/mark_replay_and_get_root_seed/tests.security.rs");
+    }
+    mod mark_replay_and_get_root_seed_benchmark {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/mark_replay_and_get_root_seed/benchmark.rs");
+    }
+    mod seal_edge_packet_load {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/seal_edge_packet/tests.load.rs");
+    }
+    mod seal_edge_packet_stress {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/seal_edge_packet/tests.stress.rs");
+    }
+    mod seal_edge_packet_chaos {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/seal_edge_packet/tests.chaos.rs");
+    }
+    mod seal_edge_packet_security {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/seal_edge_packet/tests.security.rs"
+        );
+    }
+    mod seal_edge_packet_benchmark {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/seal_edge_packet/benchmark.rs");
+    }
+    mod open_edge_packet_load {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/open_edge_packet/tests.load.rs");
+    }
+    mod open_edge_packet_stress {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/open_edge_packet/tests.stress.rs");
+    }
+    mod open_edge_packet_chaos {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/open_edge_packet/tests.chaos.rs");
+    }
+    mod open_edge_packet_security {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/open_edge_packet/tests.security.rs"
+        );
+    }
+    mod open_edge_packet_benchmark {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/open_edge_packet/benchmark.rs");
+    }
+    mod choreograph_packet_load {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/choreograph_packet/tests.load.rs");
+    }
+    mod choreograph_packet_stress {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/choreograph_packet/tests.stress.rs"
+        );
+    }
+    mod choreograph_packet_chaos {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/choreograph_packet/tests.chaos.rs");
+    }
+    mod choreograph_packet_security {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/choreograph_packet/tests.security.rs"
+        );
+    }
+    mod choreograph_packet_benchmark {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/choreograph_packet/benchmark.rs");
+    }
+    mod noise_sign_payload_load {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/noise_sign_payload/tests.load.rs");
+    }
+    mod noise_sign_payload_stress {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/noise_sign_payload/tests.stress.rs"
+        );
+    }
+    mod noise_sign_payload_chaos {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/noise_sign_payload/tests.chaos.rs");
+    }
+    mod noise_sign_payload_security {
+        use super::*;
+        include!(
+            "../../semantic-behaviors-types/quarkbehaviors/noise_sign_payload/tests.security.rs"
+        );
+    }
+    mod noise_sign_payload_benchmark {
+        use super::*;
+        include!("../../semantic-behaviors-types/quarkbehaviors/noise_sign_payload/benchmark.rs");
+    }
+
+    fn report_dir() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("test-results")
+            .join("semantic-quarkbehavior-json")
+    }
+
+    fn now_nanos() -> u128 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock must be valid")
+            .as_nanos()
+    }
+
+    fn escape_json(value: &str) -> String {
+        value
+            .chars()
+            .flat_map(|ch| match ch {
+                '"' => "\\\"".chars().collect::<Vec<_>>(),
+                '\\' => "\\\\".chars().collect::<Vec<_>>(),
+                '\n' => "\\n".chars().collect::<Vec<_>>(),
+                '\r' => "\\r".chars().collect::<Vec<_>>(),
+                '\t' => "\\t".chars().collect::<Vec<_>>(),
+                _ => vec![ch],
+            })
+            .collect()
+    }
+
+    fn rss_bytes() -> u64 {
+        let Ok(status) = fs::read_to_string("/proc/self/status") else {
+            return 0;
+        };
+        status
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("VmRSS:").and_then(|rest| {
+                    rest.split_whitespace()
+                        .next()
+                        .and_then(|kb| kb.parse::<u64>().ok())
+                        .map(|kb| kb * 1024)
+                })
+            })
+            .unwrap_or(0)
+    }
+
+    fn cpu_seconds() -> f64 {
+        let Ok(stat) = fs::read_to_string("/proc/self/stat") else {
+            return 0.0;
+        };
+        let Some(end_comm) = stat.rfind(") ") else {
+            return 0.0;
+        };
+        let fields = stat[end_comm + 2..].split_whitespace().collect::<Vec<_>>();
+        let utime = fields
+            .get(11)
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(0.0);
+        let stime = fields
+            .get(12)
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(0.0);
+        (utime + stime) / 100.0
+    }
+
+    fn update_manifest(dir: &Path) {
+        let mut files = fs::read_dir(dir)
+            .expect("semantic quarkbehavior report dir must be readable")
+            .filter_map(Result::ok)
+            .filter_map(|entry| {
+                let path = entry.path();
+                let file_name = path.file_name()?.to_str()?.to_owned();
+                if path.extension()?.to_str()? == "json" && file_name != "manifest.json" {
+                    Some(file_name)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        files.sort();
+        let files_json = files
+            .iter()
+            .map(|file| format!("\"{}\"", escape_json(file)))
+            .collect::<Vec<_>>()
+            .join(",");
+        let manifest = format!(
+            "{{\n  \"schema\": \"lses.semantic.quarkbehavior.manifest.v1\",\n  \"generated_at_unix_nanos\": {},\n  \"files\": [{}]\n}}\n",
+            now_nanos(), files_json
+        );
+        fs::write(dir.join("manifest.json"), manifest)
+            .expect("semantic quarkbehavior manifest must be writable");
+    }
+
+    fn write_modular_report(
+        function_name: &str,
+        kind: &str,
+        iterations: u64,
+        wall_ns: u128,
+        cpu_delta_seconds: f64,
+        rss_start: u64,
+        rss_end: u64,
+        max_rss_bytes: u64,
+        passed: bool,
+    ) {
+        let dir = report_dir();
+        fs::create_dir_all(&dir).expect("semantic quarkbehavior report dir must be creatable");
+        let id = format!("{}_{}_{}", function_name, kind, now_nanos());
+        let exec_per_second = if wall_ns == 0 {
+            0.0
+        } else {
+            (iterations as f64) / ((wall_ns as f64) / 1_000_000_000.0)
+        };
+        let cpu_per_execution = if iterations == 0 {
+            0.0
+        } else {
+            cpu_delta_seconds / iterations as f64
+        };
+        let ram_delta = rss_end.saturating_sub(rss_start);
+        let ram_per_execution = if iterations == 0 {
+            0
+        } else {
+            ram_delta / iterations
+        };
+        let payload = format!(
+            "{{\n  \"schema\": \"lses.semantic.quarkbehavior.result.v1\",\n  \"id\": \"{}\",\n  \"category\": \"QuarkBehaviors\",\n  \"function_name\": \"{}\",\n  \"test_kind\": \"{}\",\n  \"status\": \"{}\",\n  \"iterations\": {},\n  \"wall_ns\": {},\n  \"executions_per_second\": {:.6},\n  \"cpu_seconds_total\": {:.9},\n  \"cpu_seconds_per_execution\": {:.12},\n  \"ram_bytes_start\": {},\n  \"ram_bytes_end\": {},\n  \"ram_bytes_per_execution\": {},\n  \"ram_bytes_max\": {},\n  \"assertions\": [{{ \"name\": \"modular function behavior completed\", \"passed\": {} }}]\n}}\n",
+            escape_json(&id),
+            escape_json(function_name),
+            escape_json(kind),
+            if passed { "passed" } else { "failed" },
+            iterations,
+            wall_ns,
+            exec_per_second,
+            cpu_delta_seconds,
+            cpu_per_execution,
+            rss_start,
+            rss_end,
+            ram_per_execution,
+            max_rss_bytes,
+            passed
+        );
+        fs::write(dir.join(format!("{id}.json")), payload)
+            .expect("semantic quarkbehavior result must be writable");
+        update_manifest(&dir);
+    }
+
+    fn sample_edge() -> EdgeContext {
+        EdgeContext {
+            intent_id: 9,
+            edge_id: 3,
+            sequence: 1,
+        }
+    }
+
+    fn session_seed(function_name: &str, iteration: u64) -> u64 {
+        let hash = function_name.bytes().fold(0u64, |acc, byte| {
+            acc.wrapping_mul(131).wrapping_add(byte as u64)
+        });
+        40_000 + ((hash + iteration * 7) % 20_000)
+    }
+
+    fn exercise_function(function_name: &str, iteration: u64) -> bool {
+        match function_name {
+            "state" => state().lock().is_ok(),
+            "init_pqc_session" => {
+                let mut out = [0u8; 1184];
+                init_pqc_session(session_seed(function_name, iteration), out.as_mut_ptr()) == 0
+                    && out[0] == 0xAA
+            }
+            "verify_pqc_handshake" => {
+                let mut out = [0u8; 1184];
+                let sid = session_seed(function_name, iteration);
+                init_pqc_session(sid, out.as_mut_ptr()) == 0
+                    && verify_pqc_handshake(sid, core::ptr::null()) == 0
+            }
+            "init_enclave_keys" => {
+                init_enclave_keys();
+                true
+            }
+            "generate_agent_key" => {
+                let name = format!("agent-{iteration}");
+                let mut out = [0u8; 32];
+                generate_agent_key(
+                    name.as_ptr(),
+                    name.len(),
+                    b"sign".as_ptr(),
+                    4,
+                    b"data".as_ptr(),
+                    4,
+                    b"intent".as_ptr(),
+                    6,
+                    out.as_mut_ptr(),
+                ) == 0
+                    && out.iter().any(|byte| *byte != 0)
+            }
+            "verify_tripartite_identity" => {
+                let id = TripartiteIdentity {
+                    pub_key: [iteration as u8; 32],
+                    mac_addr: [1, 2, 3, 4, 5, 6],
+                    ip_addr: [127, 0, 0, 1],
+                };
+                let mut hasher = Sha256::new();
+                hasher.update(id.pub_key);
+                hasher.update(id.mac_addr);
+                hasher.update(id.ip_addr);
+                let expected = hasher.finalize();
+                verify_tripartite_identity(&id, expected.as_ptr()) == 0
+            }
+            "derive_edge_key" => derive_edge_key(&sample_edge(), &ROOT_SEED_DEFAULT)
+                .iter()
+                .any(|byte| *byte != 0),
+            "edge_context_aad" => edge_context_aad(&sample_edge()).len() == 24,
+            "mark_replay_and_get_root_seed" => {
+                mark_replay_and_get_root_seed(session_seed(function_name, iteration)).is_ok()
+            }
+            "seal_edge_packet" => {
+                let ctx = sample_edge();
+                let payload = b"semantic seal payload";
+                let mut frame = [0u8; 96];
+                let mut frame_len = 0usize;
+                seal_edge_packet(
+                    payload.as_ptr(),
+                    payload.len(),
+                    &ctx,
+                    session_seed(function_name, iteration),
+                    frame.as_mut_ptr(),
+                    frame.len(),
+                    &mut frame_len,
+                ) == 0
+                    && frame_len == payload.len() + AEAD_OVERHEAD
+            }
+            "open_edge_packet" => {
+                let ctx = sample_edge();
+                let payload = b"semantic open payload";
+                let sid = session_seed(function_name, iteration) * 2;
+                let mut frame = [0u8; 96];
+                let mut frame_len = 0usize;
+                let mut out = [0u8; 96];
+                let mut out_len = 0usize;
+                seal_edge_packet(
+                    payload.as_ptr(),
+                    payload.len(),
+                    &ctx,
+                    sid,
+                    frame.as_mut_ptr(),
+                    frame.len(),
+                    &mut frame_len,
+                ) == 0
+                    && open_edge_packet(
+                        frame.as_ptr(),
+                        frame_len,
+                        &ctx,
+                        sid + 1,
+                        out.as_mut_ptr(),
+                        out.len(),
+                        &mut out_len,
+                    ) == 0
+                    && &out[..out_len] == payload
+            }
+            "choreograph_packet" => {
+                let in_ctx = EdgeContext {
+                    intent_id: 1,
+                    edge_id: 1,
+                    sequence: iteration,
+                };
+                let out_ctx = EdgeContext {
+                    intent_id: 1,
+                    edge_id: 2,
+                    sequence: iteration + 1,
+                };
+                let mut payload = [7u8; 32];
+                choreograph_packet(
+                    payload.as_mut_ptr(),
+                    payload.len(),
+                    &in_ctx,
+                    &out_ctx,
+                    session_seed(function_name, iteration),
+                ) == 0
+            }
+            "noise_sign_payload" => {
+                let mut sig = [0u8; 64];
+                noise_sign_payload(
+                    b"payload".as_ptr(),
+                    7,
+                    sig.as_mut_ptr(),
+                    session_seed(function_name, iteration),
+                ) == 0
+                    && sig.iter().any(|byte| *byte != 0)
+            }
+            _ => false,
+        }
+    }
+
+    fn run_modular_behavior_case(function_name: &str, kind: &str) {
+        let _guard = MODULAR_TEST_LOCK.lock().unwrap();
+        init_enclave_keys();
+        let iterations = match kind {
+            "load" => 16,
+            "stress" => 64,
+            "chaos" => 8,
+            "security" => 8,
+            "benchmark" => 128,
+            _ => 4,
+        };
+        let rss_start = rss_bytes();
+        let cpu_start = cpu_seconds();
+        let started = Instant::now();
+        let mut max_rss = rss_start;
+        let mut passed = true;
+        for iteration in 0..iterations {
+            passed &= exercise_function(function_name, iteration);
+            max_rss = max_rss.max(rss_bytes());
+        }
+        let wall_ns = started.elapsed().as_nanos();
+        let cpu_delta = (cpu_seconds() - cpu_start).max(0.0);
+        let rss_end = rss_bytes();
+        write_modular_report(
+            function_name,
+            kind,
+            iterations,
+            wall_ns,
+            cpu_delta,
+            rss_start,
+            rss_end,
+            max_rss,
+            passed,
+        );
+        assert!(passed, "{kind} behavior failed for {function_name}");
     }
 }
