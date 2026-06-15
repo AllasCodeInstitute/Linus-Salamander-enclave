@@ -42,17 +42,18 @@ GitHub never defines cryptographic validity.
 
 ## Secure leaks deep scanner
 
-The `linus` CLI includes a deep leak scanner for repository secrets:
+The `linus` CLI includes an offline-first deep leak scanner for repository secrets:
 
 ```bash
 cargo run --manifest-path rust/linus/Cargo.toml -- deepscan secure_leaks {path}
 ```
 
-The command scans only files visible to Git (`git ls-files -co --exclude-standard`), so ignored files from `.gitignore` are skipped. It checks the current worktree and every commit reachable from every branch (`git rev-list --all`) for high-confidence secret prefixes (cloud keys, GitHub/Slack/Stripe/Google tokens, Linus secrets), private-key blocks, and suspicious security assignments such as tokens, passwords, API keys, and client secrets. Matching values are redacted in the report.
-
-A standalone Zig implementation is available at `zig/secure_leaks.zig` and can be built with:
+Useful options:
 
 ```bash
-zig build-exe zig/secure_leaks.zig -femit-bin=linus-secure-leaks
-./linus-secure-leaks {path}
+cargo run --manifest-path rust/linus/Cargo.toml -- deepscan secure_leaks   --git-history   --format text|json|ndjson|sarif   --baseline secretsleak.baseline   --fail-on low|medium|high|critical   --max-ram-mib 1024   --project-concurrency 4   --scan-workers 1   {path...}
 ```
+
+The command scans Git-visible files (`git ls-files -co --exclude-standard`) and, by default, Git history reachable from all refs with blob deduplication. It redacts secrets in every output format, stores `secret_sha256`/fingerprints for dedupe and baseline workflows, and does not call the network unless future live validation is explicitly enabled. The implementation plan is tracked in [`docs/implementation/deepscanner/secure_leak/PLAN.md`](./docs/implementation/deepscanner/secure_leak/PLAN.md).
+
+A standalone Zig implementation remains available at `zig/secure_leaks.zig` and is planned for modular parity with the Rust scanner.
