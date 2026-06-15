@@ -39,3 +39,20 @@ GitHub never defines cryptographic validity.
 *LSES reduces disk-based forensic exposure by avoiding local plaintext persistence. Runtime memory attacks remain in scope unless hardware-backed isolation is enabled. When hardware enclaves are unavailable, LSES mitigates unauthorized access through encrypted snapshots, dual signatures, and replay guards. This does not replace hardware-backed memory isolation.*
 
 <img src="https://i.imgur.com/eodldQK.png" style="width: 300px;" />
+
+## Secure leaks deep scanner
+
+The `linus` CLI includes a deep leak scanner for repository secrets:
+
+```bash
+cargo run --manifest-path rust/linus/Cargo.toml -- deepscan secure_leaks {path}
+```
+
+The command scans only files visible to Git (`git ls-files -co --exclude-standard`), so ignored files from `.gitignore` are skipped. It checks the current worktree and every commit reachable from every branch (`git rev-list --all`) for high-confidence secret prefixes (cloud keys, GitHub/Slack/Stripe/Google tokens, Linus secrets), private-key blocks, and suspicious security assignments such as tokens, passwords, API keys, and client secrets. Matching values are redacted in the report.
+
+A standalone Zig implementation is available at `zig/secure_leaks.zig` and can be built with:
+
+```bash
+zig build-exe zig/secure_leaks.zig -femit-bin=linus-secure-leaks
+./linus-secure-leaks {path}
+```
