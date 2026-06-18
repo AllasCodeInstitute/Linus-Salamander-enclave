@@ -1,2 +1,80 @@
+# CVE-LSES-017: Comprehensive .gitignore to prevent leaking build artifacts,
+# sealed state files, and credentials.
+
+# Editor artifacts
 .kilo
+*.swp
+*.swo
+*~
+
+# Project-specific
 prompts/
+
+# Sealed vault snapshots — MUST never be committed to version control.
+# These files may contain ciphertext encrypted with the KEK, and committing
+# them exposes the ciphertext to offline brute-force if the KEK is weak.
+*.sealed.json
+enclave.sealed.json
+zig/*.sealed.json
+
+# Rust build artifacts
+target/
+rust/enclave/target/
+**/.fingerprint/
+**/.cargo-lock
+**/CACHEDIR.TAG
+**/.rustc_info.json
+
+# Zig build artifacts
+zig-out/
+zig-cache/
+.zig-cache/
+fast_buffer.lib
+
+# Environment and secrets — never commit
+.env
+.env.*
+*.env
+secrets.json
+secrets.yaml
+secrets.toml
+
+# Cryptographic material
+*.key
+*.pem
+*.p12
+*.pfx
+*.der
+*.crt
+*.csr
+*.seed
+*.secret
+*.priv
+id_rsa
+id_ecdsa
+id_ed25519
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
+
+# Node artifacts (if any tooling is added)
+node_modules/

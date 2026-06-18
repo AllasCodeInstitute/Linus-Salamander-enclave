@@ -7,6 +7,7 @@ use hmac::{Hmac, Mac};
 use rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256};
 use std::sync::{Mutex, OnceLock};
+use zeroize::Zeroize;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -577,6 +578,182 @@ mod tests {
     }
 
     #[test]
+    fn atomic_unit_choreograph_packet_reencrypts_aead_frame() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        init_enclave_keys();
+        let in_ctx = EdgeContext {
+            intent_id: 70,
+            edge_id: 1,
+            sequence: 1,
+        };
+        let out_ctx = EdgeContext {
+            intent_id: 70,
+            edge_id: 2,
+            sequence: 2,
+        };
+        let plaintext = b"hop-private-key-material";
+        let mut frame = seal_packet(&in_ctx, 12_000, plaintext);
+
+        let status = choreograph_packet(
+            frame.as_mut_ptr(),
+            frame.len(),
+            &in_ctx,
+            &out_ctx,
+            12_001,
+        );
+
+        assert_eq!(status, 0);
+        assert_eq!(
+            open_packet(&in_ctx, 12_002, &frame),
+            Err(ERR_AUTHENTICATION),
+            "re-choreographed frame must no longer authenticate under the input edge"
+        );
+        assert_eq!(
+            open_packet(&out_ctx, 12_003, &frame).expect("output edge must open frame"),
+            plaintext
+        );
+    }
+
+    #[test]
+    fn atomic_security_choreograph_packet_rejects_raw_payload() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        init_enclave_keys();
+        let in_ctx = EdgeContext {
+            intent_id: 71,
+            edge_id: 1,
+            sequence: 1,
+        };
+        let out_ctx = EdgeContext {
+            intent_id: 71,
+            edge_id: 2,
+            sequence: 2,
+        };
+        let mut raw_payload = *b"not-an-aead-frame";
+
+        let status = choreograph_packet(
+            raw_payload.as_mut_ptr(),
+            raw_payload.len(),
+            &in_ctx,
+            &out_ctx,
+            12_010,
+        );
+
+        assert_eq!(status, ERR_AUTHENTICATION);
+    }
+
+    #[test]
+    fn ffi_unit_error_contracts_reject_null_and_small_buffers() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        init_enclave_keys();
+        let ctx = edge();
+        let payload = b"ffi-error-contract";
+        let mut frame = [0u8; 64];
+        let mut frame_len = 0usize;
+        let mut out = [0u8; 4];
+        let mut out_len = 0usize;
+        let mut sig = [0u8; 64];
+
+        assert_eq!(
+            seal_edge_packet(
+                core::ptr::null(),
+                payload.len(),
+                &ctx,
+                60_000,
+                frame.as_mut_ptr(),
+                frame.len(),
+                &mut frame_len,
+            ),
+            ERR_NULL_POINTER
+        );
+        assert_eq!(
+            seal_edge_packet(
+                payload.as_ptr(),
+                payload.len(),
+                &ctx,
+                60_001,
+                frame.as_mut_ptr(),
+                AEAD_OVERHEAD,
+                &mut frame_len,
+            ),
+            ERR_BUFFER_TOO_SMALL
+        );
+
+        let frame_vec = seal_packet(&ctx, 60_002, payload);
+        assert_eq!(
+            open_edge_packet(
+                frame_vec.as_ptr(),
+                frame_vec.len(),
+                &ctx,
+                60_003,
+                out.as_mut_ptr(),
+                out.len(),
+                &mut out_len,
+            ),
+            ERR_BUFFER_TOO_SMALL
+        );
+        assert_eq!(
+            open_edge_packet(
+                core::ptr::null(),
+                frame_vec.len(),
+                &ctx,
+                60_004,
+                out.as_mut_ptr(),
+                out.len(),
+                &mut out_len,
+            ),
+            ERR_NULL_POINTER
+        );
+        assert_eq!(
+            noise_sign_payload(core::ptr::null(), payload.len(), sig.as_mut_ptr(), 60_005),
+            ERR_NULL_POINTER
+        );
+        assert_eq!(
+            choreograph_packet(core::ptr::null_mut(), 0, &ctx, &ctx, 60_006),
+            ERR_NULL_POINTER
+        );
+    }
+
+    #[test]
+    fn ffi_security_choreograph_packet_replay_is_rejected() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        init_enclave_keys();
+        let in_ctx = EdgeContext {
+            intent_id: 72,
+            edge_id: 1,
+            sequence: 1,
+        };
+        let out_ctx = EdgeContext {
+            intent_id: 72,
+            edge_id: 2,
+            sequence: 2,
+        };
+        let payload = b"ffi replay payload";
+        let mut first_frame = seal_packet(&in_ctx, 61_000, payload);
+        let mut replay_frame = seal_packet(&in_ctx, 61_001, payload);
+
+        assert_eq!(
+            choreograph_packet(
+                first_frame.as_mut_ptr(),
+                first_frame.len(),
+                &in_ctx,
+                &out_ctx,
+                61_002,
+            ),
+            0
+        );
+        assert_eq!(
+            choreograph_packet(
+                replay_frame.as_mut_ptr(),
+                replay_frame.len(),
+                &in_ctx,
+                &out_ctx,
+                61_002,
+            ),
+            ERR_REPLAY
+        );
+    }
+
+    #[test]
     fn atomic_load_multiple_edges_roundtrip() {
         let _guard = TEST_LOCK.lock().unwrap();
         init_enclave_keys();
@@ -623,18 +800,23 @@ mod tests {
                 edge_id: 2,
                 sequence: i + 1,
             };
-            let mut payload = [i as u8; 32];
+            let payload = [i as u8; 32];
+            let mut frame = seal_packet(&in_ctx, 12_000 + (i * 3), &payload);
             assert_eq!(
                 choreograph_packet(
-                    payload.as_mut_ptr(),
-                    payload.len(),
+                    frame.as_mut_ptr(),
+                    frame.len(),
                     &in_ctx,
                     &out_ctx,
-                    12_000 + i
+                    12_001 + (i * 3),
                 ),
                 0
             );
-            let frame = seal_packet(&out_ctx, 13_000 + i, &payload);
+            assert_eq!(
+                open_packet(&out_ctx, 12_002 + (i * 3), &frame)
+                    .expect("choreographed stress frame must open"),
+                payload
+            );
             transformed += frame.len();
         }
         let assertions = [assertion(
@@ -1525,14 +1707,38 @@ mod modular_quarkbehavior_tests {
                     edge_id: 2,
                     sequence: iteration + 1,
                 };
-                let mut payload = [7u8; 32];
-                choreograph_packet(
-                    payload.as_mut_ptr(),
+                let payload = [7u8; 32];
+                let sid = session_seed(function_name, iteration) * 3;
+                let mut frame = [0u8; 96];
+                let mut frame_len = 0usize;
+                let mut out = [0u8; 96];
+                let mut out_len = 0usize;
+                seal_edge_packet(
+                    payload.as_ptr(),
                     payload.len(),
                     &in_ctx,
-                    &out_ctx,
-                    session_seed(function_name, iteration),
+                    sid,
+                    frame.as_mut_ptr(),
+                    frame.len(),
+                    &mut frame_len,
                 ) == 0
+                    && choreograph_packet(
+                        frame.as_mut_ptr(),
+                        frame_len,
+                        &in_ctx,
+                        &out_ctx,
+                        sid + 1,
+                    ) == 0
+                    && open_edge_packet(
+                        frame.as_ptr(),
+                        frame_len,
+                        &out_ctx,
+                        sid + 2,
+                        out.as_mut_ptr(),
+                        out.len(),
+                        &mut out_len,
+                    ) == 0
+                    && &out[..out_len] == payload
             }
             "noise_sign_payload" => {
                 let mut sig = [0u8; 64];

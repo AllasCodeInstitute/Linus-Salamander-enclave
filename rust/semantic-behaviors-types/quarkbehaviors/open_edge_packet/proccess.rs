@@ -29,8 +29,8 @@ pub extern "C" fn open_edge_packet(
         Ok(seed) => seed,
         Err(code) => return code,
     };
-    let key = derive_edge_key(edge, &root_seed);
-    let cipher = match Aes256Gcm::new_from_slice(&key) {
+    let key = zeroize::Zeroizing::new(derive_edge_key(edge, &*root_seed));
+    let cipher = match Aes256Gcm::new_from_slice(&*key) {
         Ok(cipher) => cipher,
         Err(_) => return ERR_CRYPTO,
     };
@@ -45,6 +45,7 @@ pub extern "C" fn open_edge_packet(
         .decrypt_in_place_detached(nonce, &aad, &mut plaintext, tag)
         .is_err()
     {
+        plaintext.zeroize();
         return ERR_AUTHENTICATION;
     }
 
@@ -52,6 +53,7 @@ pub extern "C" fn open_edge_packet(
         core::ptr::copy_nonoverlapping(plaintext.as_ptr(), out_plaintext, plaintext_len);
         *out_plaintext_len = plaintext_len;
     }
+    plaintext.zeroize();
 
     0
 }

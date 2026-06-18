@@ -1,7 +1,5 @@
 // Performance, Load and Stress Testing for Vault Core
-use std::time::{Instant, Duration};
-use std::ptr;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 #[repr(C)]
 pub struct AgentPacket {
@@ -12,7 +10,12 @@ pub struct AgentPacket {
 
 extern "C" {
     fn init_enclave_keys();
-    fn noise_sign_payload(payload_ptr: *const u8, len: usize, out_sig: *mut u8) -> i32;
+    fn noise_sign_payload(
+        payload_ptr: *const u8,
+        len: usize,
+        out_sig: *mut u8,
+        session_id: u64,
+    ) -> i32;
 }
 
 #[test]
@@ -27,7 +30,12 @@ fn test_performance_throughput_stress() {
     
     for i in 0..iterations {
         let status = unsafe { 
-            noise_sign_payload(mock_payload.as_ptr(), mock_payload.len(), signature.as_mut_ptr()) 
+            noise_sign_payload(
+                mock_payload.as_ptr(),
+                mock_payload.len(),
+                signature.as_mut_ptr(),
+                71_000 + i as u64,
+            )
         };
         if status != 0 { panic!("Failed at iteration {}", i); }
     }
@@ -58,9 +66,14 @@ fn test_stress_concurrency_simulation() {
     let mut signature = [0u8; 64];
     let payload = b"stress-test-data";
 
-    for _ in 0..iterations {
+    for i in 0..iterations {
         unsafe {
-            noise_sign_payload(payload.as_ptr(), payload.len(), signature.as_mut_ptr());
+            noise_sign_payload(
+                payload.as_ptr(),
+                payload.len(),
+                signature.as_mut_ptr(),
+                72_000 + i as u64,
+            );
         }
     }
     

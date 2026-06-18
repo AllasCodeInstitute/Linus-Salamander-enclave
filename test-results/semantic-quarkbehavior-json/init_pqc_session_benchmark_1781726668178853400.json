@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "init_pqc_session_benchmark_1781726668178853400",
+  "category": "QuarkBehaviors",
+  "function_name": "init_pqc_session",
+  "test_kind": "benchmark",
+  "status": "failed",
+  "iterations": 128,
+  "wall_ns": 749000,
+  "executions_per_second": 170894.526035,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 0,
+  "ram_bytes_end": 0,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 0,
+  "assertions": [{ "name": "modular function behavior completed", "passed": false }]
+}

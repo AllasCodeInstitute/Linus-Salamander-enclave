@@ -1,0 +1,19 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "atomicbehaviors_security_identity_signature_envelope_1781726265382791000",
+  "category": "AtomicBehaviors",
+  "test_kind": "security",
+  "scope": "functionality",
+  "name": "identity_signature_envelope",
+  "status": "passed",
+  "duration_ns": 8756800,
+  "narrative": "Validates identity verification, envelope sealing, and payload signing as one security behavior.",
+  "metrics": [
+    { "name": "signature_len", "value": "64", "unit": "bytes" },
+    { "name": "frame_len", "value": "43", "unit": "bytes" }
+  ],
+  "assertions": [
+    { "name": "tripartite identity verifies", "passed": true },
+    { "name": "signature is non-empty", "passed": true }
+  ]
+}

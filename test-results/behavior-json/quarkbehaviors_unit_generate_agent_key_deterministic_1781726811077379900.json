@@ -1,0 +1,18 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "quarkbehaviors_unit_generate_agent_key_deterministic_1781726811077379900",
+  "category": "QuarkBehaviors",
+  "test_kind": "unit",
+  "scope": "function",
+  "name": "generate_agent_key_deterministic",
+  "status": "passed",
+  "duration_ns": 99300,
+  "narrative": "Validates deterministic semantic key derivation at the function layer.",
+  "metrics": [
+    { "name": "keys_generated", "value": "3", "unit": "count" }
+  ],
+  "assertions": [
+    { "name": "same semantic inputs produce the same key", "passed": true },
+    { "name": "capability changes produce a different key", "passed": true }
+  ]
+}

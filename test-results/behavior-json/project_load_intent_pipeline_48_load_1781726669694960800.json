@@ -1,0 +1,17 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "project_load_intent_pipeline_48_load_1781726669694960800",
+  "category": "Project",
+  "test_kind": "load",
+  "scope": "intent",
+  "name": "intent_pipeline_48_load",
+  "status": "passed",
+  "duration_ns": 460444200,
+  "narrative": "Loads the project-level Intent pipeline with multiple key-operation intents.",
+  "metrics": [
+    { "name": "intents", "value": "48", "unit": "count" }
+  ],
+  "assertions": [
+    { "name": "all load intents completed", "passed": true }
+  ]
+}

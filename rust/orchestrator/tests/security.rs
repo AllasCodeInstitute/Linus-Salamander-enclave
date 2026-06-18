@@ -1,12 +1,17 @@
 // Security Testing
 // Focuses on robustness against malformed data and pointer safety.
 
-use std::ptr;
-
 extern "C" {
     fn init_enclave_keys();
-    fn noise_sign_payload(payload_ptr: *const u8, len: usize, out_sig: *mut u8) -> i32;
+    fn noise_sign_payload(
+        payload_ptr: *const u8,
+        len: usize,
+        out_sig: *mut u8,
+        session_id: u64,
+    ) -> i32;
 }
+
+const ERR_NULL_POINTER: i32 = -2;
 
 #[test]
 fn test_security_null_pointer_handling() {
@@ -21,6 +26,11 @@ fn test_security_null_pointer_handling() {
     // This is a "Positive/Negative" security test. 
     // We expect the system to NOT crash or at least return error if we added checks.
     // For now, we validate standard behavior.
+    let status = unsafe {
+        noise_sign_payload(std::ptr::null(), 16, sig.as_mut_ptr(), 74_000)
+    };
+
+    assert_eq!(status, ERR_NULL_POINTER);
 }
 
 #[test]

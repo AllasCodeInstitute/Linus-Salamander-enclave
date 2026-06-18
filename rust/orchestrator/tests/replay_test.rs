@@ -1,5 +1,3 @@
-use std::ptr;
-
 #[repr(C)]
 pub struct AgentPacket {
     pub payload_ptr: *mut u8,

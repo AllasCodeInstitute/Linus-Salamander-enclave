@@ -29,8 +29,8 @@ pub extern "C" fn seal_edge_packet(
         Ok(seed) => seed,
         Err(code) => return code,
     };
-    let key = derive_edge_key(edge, &root_seed);
-    let cipher = match Aes256Gcm::new_from_slice(&key) {
+    let key = zeroize::Zeroizing::new(derive_edge_key(edge, &*root_seed));
+    let cipher = match Aes256Gcm::new_from_slice(&*key) {
         Ok(cipher) => cipher,
         Err(_) => return ERR_CRYPTO,
     };
@@ -47,7 +47,10 @@ pub extern "C" fn seal_edge_packet(
     let tag =
         match cipher.encrypt_in_place_detached(Nonce::from_slice(&nonce), &aad, &mut ciphertext) {
             Ok(tag) => tag,
-            Err(_) => return ERR_CRYPTO,
+            Err(_) => {
+                ciphertext.zeroize();
+                return ERR_CRYPTO;
+            }
         };
 
     unsafe {
@@ -64,6 +67,7 @@ pub extern "C" fn seal_edge_packet(
         );
         *out_frame_len = required_len;
     }
+    ciphertext.zeroize();
 
     0
 }

@@ -1,0 +1,17 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "quarkbehaviors_load_generate_agent_key_512_inputs_1781726811021306400",
+  "category": "QuarkBehaviors",
+  "test_kind": "load",
+  "scope": "function",
+  "name": "generate_agent_key_512_inputs",
+  "status": "passed",
+  "duration_ns": 13226600,
+  "narrative": "Exercises repeated semantic key derivation with many independent inputs.",
+  "metrics": [
+    { "name": "iterations", "value": "512", "unit": "count" }
+  ],
+  "assertions": [
+    { "name": "load loop produced non-trivial aggregate", "passed": true }
+  ]
+}

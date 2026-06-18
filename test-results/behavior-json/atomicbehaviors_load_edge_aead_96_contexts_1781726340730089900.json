@@ -1,0 +1,17 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "atomicbehaviors_load_edge_aead_96_contexts_1781726340730089900",
+  "category": "AtomicBehaviors",
+  "test_kind": "load",
+  "scope": "functionality",
+  "name": "edge_aead_96_contexts",
+  "status": "passed",
+  "duration_ns": 6318000,
+  "narrative": "Loads the AEAD functionality across many edge contexts.",
+  "metrics": [
+    { "name": "edges", "value": "96", "unit": "count" }
+  ],
+  "assertions": [
+    { "name": "all edge contexts completed", "passed": true }
+  ]
+}

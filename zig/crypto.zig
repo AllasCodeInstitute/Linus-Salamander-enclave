@@ -64,7 +64,10 @@ pub const EnclaveCrypto = struct {
         }
     }
 
-    pub fn deterministicTestBytes(buffer: []u8, seed: u64) void {
+    // CVE-LSES-011: NOT pub — deterministic RNG must never be callable by external
+    // callers. Exposing it on the public EnclaveCrypto API allows adversaries to
+    // generate the same "random" bytes used internally and mount preimage attacks.
+    fn deterministicTestBytes(buffer: []u8, seed: u64) void {
         var prng = std.Random.DefaultPrng.init(seed);
         prng.random().bytes(buffer);
     }
@@ -365,12 +368,15 @@ pub fn canonicalizeSignatureInput(
 ) ![]u8 {
     const canonical_body = try canonicalizeSnapshotBody(allocator, body);
     defer allocator.free(canonical_body);
-    
-    var hex_id_buf: [64]u8 = undefined;
-    const hex_id = std.fmt.bufPrint(&hex_id_buf, "{x}", .{snapshot_id}) catch unreachable;
-    
+
+    // CVE-LSES-015: Use bytesToHex for deterministic zero-padded 64-char hex.
+    // The previous "{x}" format specifier for a [32]u8 array does NOT zero-pad
+    // individual bytes, producing variable-length output (e.g. 0x0a → "a" not "0a"),
+    // which truncates signatures and breaks verification for bytes < 0x10.
+    const hex_id = std.fmt.bytesToHex(snapshot_id, .lower);
+
     return try std.fmt.allocPrint(allocator, "LSES-SIGNATURE-INPUT-V1;\nsnapshot_id={s};\nsnapshot_body={d}:{s};", .{
-        hex_id,
+        &hex_id,
         canonical_body.len,
         canonical_body,
     });
@@ -429,6 +435,12 @@ pub const NonceRecord = struct {
     context_hash: [32]u8,
 };
 
+// CVE-LSES-014: Hard cap on the registry to prevent unbounded memory growth.
+// Without a cap, a caller that sends N unique (nonce, context) pairs can consume
+// O(N) heap memory with no bound, enabling a slow-path denial-of-service.
+// When the cap is reached, new entries are denied (fail-closed).
+const MAX_NONCE_REGISTRY_SIZE: u32 = 100_000;
+
 /// In-Memory Nonce Registry to detect/block nonces reuse
 pub const NonceRegistry = struct {
     seen: std.AutoHashMap([32]u8, NonceRecord),
@@ -454,9 +466,16 @@ pub const NonceRegistry = struct {
 
         if (self.seen.get(key)) |existing| {
             if (std.mem.eql(u8, &existing.snapshot_id, &snapshot_id)) {
-                // Idempotent verification of same snapshot
+                // Idempotent re-verification of the same snapshot is always allowed.
                 return;
             }
+            return LsesError.NonceReused;
+        }
+
+        // Fail-closed: reject new entries once the registry is full.
+        // Returning NonceReused causes the caller to refuse the snapshot,
+        // which is the safe outcome (deny rather than silently allow).
+        if (self.seen.count() >= MAX_NONCE_REGISTRY_SIZE) {
             return LsesError.NonceReused;
         }
 
@@ -542,8 +561,19 @@ pub const AccessPolicy = struct {
         consumer_id: []const u8,
         secret_ref: [32]u8,
     ) bool {
-        _ = operation;
+        // CVE-LSES-016: Enforce per-operation policy instead of silently ignoring
+        // the operation field. Callers that pass "export_plaintext" are denied
+        // unless allow_plaintext_export is explicitly set in the policy.
+        //
+        // Per-secret-ref enforcement (allow/deny individual secrets by their
+        // computed HMAC reference) is not yet implemented. Future work: add an
+        // optional `allowed_secret_refs: ?[]const [32]u8` field and check it here.
         _ = secret_ref;
+
+        if (std.mem.eql(u8, operation, "export_plaintext") and !self.allow_plaintext_export) {
+            return false;
+        }
+
         for (self.allowed_consumers) |c| {
             if (std.mem.eql(u8, c, consumer_id)) return true;
         }
@@ -705,8 +735,13 @@ pub fn decryptVerifiedSnapshot(
     // 2. Resolver KEK provider
     const provider = try ctx.kek_resolver.resolve(envelope.snapshot_body.dek_wrapping_key_id);
 
-    // 3. Wrap AAD
-    const wrap_aad = provider.key_id;
+    // 3. Wrap AAD — must be the same canonical AAD used during sealing so that
+    // the AES-256-GCM auth tag over the wrapped DEK covers the full snapshot
+    // context. CVE-LSES-012: using only provider.key_id as AAD allows a DEK
+    // wrapped for one snapshot to be substituted into any other snapshot that
+    // shares the same KEK provider, bypassing the authentication guarantee.
+    const wrap_aad = try canonicalizeAad(allocator, envelope.snapshot_body.aad);
+    defer allocator.free(wrap_aad);
 
     // 4. Unwrap DEK
     var hex_wrapped_dek: [32]u8 = undefined;

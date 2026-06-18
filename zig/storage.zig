@@ -347,6 +347,30 @@ pub const SecretWriteResult = struct {
     persistence_receipt: crypto.PersistenceReceipt,
 };
 
+// CVE-LSES-021: Return the current wall-clock time as an RFC 3339 / ISO 8601
+// timestamp string allocated into `allocator`. Must not be hardcoded.
+fn isoTimestamp(allocator: std.mem.Allocator, io: std.Io) ![]u8 {
+    const now_ns = io.vtable.now(io.userdata, .real).nanoseconds;
+    const unix_secs: u64 = @intCast(@divTrunc(now_ns, 1_000_000_000));
+    const epoch_secs = std.time.epoch.EpochSeconds{ .secs = unix_secs };
+    const epoch_day = epoch_secs.getEpochDay();
+    const year_day = epoch_day.calculateYearDay();
+    const month_day = year_day.calculateMonthDay();
+    const day_secs = epoch_secs.getDaySeconds();
+    return try std.fmt.allocPrint(
+        allocator,
+        "{d:0>4}-{d:0>2}-{d:0>2}T{d:0>2}:{d:0>2}:{d:0>2}Z",
+        .{
+            year_day.year,
+            month_day.month.numeric(),
+            @as(u8, month_day.day_index) + 1,
+            day_secs.getHoursIntoDay(),
+            day_secs.getMinutesIntoHour(),
+            day_secs.getSecondsIntoMinute(),
+        },
+    );
+}
+
 /// Linus Salamander Enclave Storage Engine
 pub const StorageEnclave = struct {
     secrets: std.StringHashMap([]const u8),
@@ -399,16 +423,24 @@ pub const StorageEnclave = struct {
             .allowed_consumers = allowed,
         };
 
+        // CVE-LSES-003: Load the KEK from the environment — fail-closed with no
+        // hardcoded fallback. A hardcoded KEK is effectively a public key because
+        // it is committed to version control, making offline DEK unwrapping trivial.
+        // Operators must inject LSES_KEK (64 hex chars = 32 bytes) at deploy time.
+        const kek_hex = std.process.getEnvVarOwned(allocator, "LSES_KEK") catch |err| switch (err) {
+            error.EnvironmentVariableNotFound => return error.MissingLsesKek,
+            else => return err,
+        };
+        defer allocator.free(kek_hex);
+        const kek_provider = try crypto.LocalDevKekProvider.initFromHex("lses-kek", kek_hex);
+
         return StorageEnclave{
             .secrets = std.StringHashMap([]const u8).init(allocator),
             .allocator = allocator,
             .io = io,
             .git_sync = git.GitSync.init(allocator, repo_path),
-            
-            .kek_provider = try crypto.LocalDevKekProvider.initFromHex(
-                "local-dev-kek-001",
-                "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
-            ),
+
+            .kek_provider = kek_provider,
             .enclave_identity = enclave_identity,
             .consumer_identity = consumer_identity,
             .nonce_registry = crypto.NonceRegistry.init(allocator),
@@ -479,8 +511,11 @@ pub const StorageEnclave = struct {
         const sealed = try crypto.sealPayload(allocator, list.items, &dek, nonce, canonical_aad);
         defer allocator.free(sealed.ciphertext);
 
-        // 4. Wrap DEK
-        const wrapped = try self.kek_provider.provider().wrap(allocator, &dek, self.kek_provider.key_id);
+        // 4. Wrap DEK — use the same canonical_aad that sealed the payload so the
+        // wrapped DEK is cryptographically bound to this specific snapshot context.
+        // CVE-LSES-012: was using kek_provider.key_id only, letting any same-KEK
+        // snapshot reuse this wrapped DEK.
+        const wrapped = try self.kek_provider.provider().wrap(allocator, &dek, canonical_aad);
 
         const sealed_payload_hex = try toHexAlloc(allocator, sealed.ciphertext);
         errdefer allocator.free(sealed_payload_hex);
@@ -499,7 +534,7 @@ pub const StorageEnclave = struct {
             .secret_ref = secret_ref,
             .epoch = next_epoch,
             .previous_snapshot_hash = previous_snapshot_hash,
-            .created_at = try allocator.dupe(u8, "2026-05-18T00:00:00Z"),
+            .created_at = try isoTimestamp(allocator, self.io), // CVE-LSES-021
             .algorithm = .{
                 .content_encryption = try allocator.dupe(u8, "AES-256-GCM"),
                 .key_wrapping = try allocator.dupe(u8, "LOCAL-DEV-AES-256-GCM"),
@@ -593,7 +628,10 @@ pub const StorageEnclave = struct {
                 return crypto.LsesError.PersistenceFailed;
             };
 
-            // git commit
+            // git commit — identity comes from system git config or the standard
+            // GIT_AUTHOR_NAME / GIT_AUTHOR_EMAIL / GIT_COMMITTER_* env vars.
+            // CVE-LSES-020: hardcoded identity strings were removed; operators must
+            // configure git identity through the standard git config mechanism.
             var msg_buf: [128]u8 = undefined;
             const msg = std.fmt.bufPrint(&msg_buf, "feat(vault): persist snapshot epoch {d}", .{envelope_without_receipt.snapshot_body.epoch}) catch "feat(vault): snapshot update";
             _ = sync.runGit(self.io, &.{ "commit", "-m", msg }) catch {}; // Commit failure is soft
@@ -603,14 +641,10 @@ pub const StorageEnclave = struct {
                 std.debug.print("[LSES Warning] Git push failed (offline/no remote origin). Snapshot committed locally.\n", .{});
             };
 
-            // Query commit SHA
+            // Query commit SHA (no identity flags needed — rev-parse is read-only)
             var sha_args = std.ArrayList([]const u8).empty;
             defer sha_args.deinit(allocator);
             try sha_args.append(allocator, "git");
-            try sha_args.append(allocator, "-c");
-            try sha_args.append(allocator, "user.name=AllasCode Worker");
-            try sha_args.append(allocator, "-c");
-            try sha_args.append(allocator, "user.email=worker@allascode.com");
             try sha_args.append(allocator, "rev-parse");
             try sha_args.append(allocator, "HEAD");
 
@@ -624,7 +658,7 @@ pub const StorageEnclave = struct {
                     .repository = try allocator.dupe(u8, "owner/repo"),
                     .branch = try allocator.dupe(u8, "main"),
                     .commit_sha = try allocator.dupe(u8, "unknown_sha"),
-                    .committed_at = try allocator.dupe(u8, "2026-05-18T00:00:00Z"),
+                    .committed_at = try isoTimestamp(allocator, self.io), // CVE-LSES-021
                 };
             };
             defer allocator.free(run_res.stdout);
@@ -647,17 +681,19 @@ pub const StorageEnclave = struct {
                 .repository = try allocator.dupe(u8, "owner/repo"),
                 .branch = try allocator.dupe(u8, "main"),
                 .commit_sha = sha_str,
-                .committed_at = try allocator.dupe(u8, "2026-05-18T00:00:00Z"),
+                .committed_at = try isoTimestamp(allocator, self.io), // CVE-LSES-021
             };
         }
 
-        // 3. Fallback / local dev persistence receipt
+        // 3. Fallback / local dev persistence receipt — all fields allocated so
+        // callers can safely free them uniformly (matches the allocated-string
+        // contract of the git path above).
         return crypto.PersistenceReceipt{
-            .provider = "local",
-            .repository = "local-dev",
-            .branch = "main",
+            .provider = try allocator.dupe(u8, "local"),
+            .repository = try allocator.dupe(u8, "local-dev"),
+            .branch = try allocator.dupe(u8, "main"),
             .commit_sha = null,
-            .committed_at = "2026-05-18T00:00:00Z",
+            .committed_at = try isoTimestamp(allocator, self.io), // CVE-LSES-021
         };
     }
 
@@ -786,10 +822,18 @@ pub const StorageEnclave = struct {
             .consumer_public_key = self.consumer_identity.public_key,
         };
 
+        // CVE-LSES-018: Propagate the last accepted epoch so the verifier can
+        // detect rollback attacks (epoch must be strictly greater than this value).
+        // Previously set to 0, which allowed an attacker to replay any old snapshot
+        // regardless of the enclave's current epoch counter.
+        //
+        // Also switch to .strict mode when a chain head is known: without it the
+        // verifier skips the MissingTrustAnchor check, allowing bootstrap of an
+        // entirely forged chain against an enclave that already has a trust anchor.
         var ctx = crypto.VerificationContext{
-            .mode = .recovery_limited,
+            .mode = if (self.trusted_chain_head != null) .strict else .recovery_limited,
             .trusted_chain_head = self.trusted_chain_head,
-            .last_accepted_epoch = 0,
+            .last_accepted_epoch = self.last_accepted_epoch,
             .verification_keys = vk,
             .policy = self.policy,
             .nonce_registry = &self.nonce_registry,

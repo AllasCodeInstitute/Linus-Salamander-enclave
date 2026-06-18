@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "generate_agent_key_benchmark_1781726666095502300",
+  "category": "QuarkBehaviors",
+  "function_name": "generate_agent_key",
+  "test_kind": "benchmark",
+  "status": "passed",
+  "iterations": 128,
+  "wall_ns": 4789500,
+  "executions_per_second": 26725.127884,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 0,
+  "ram_bytes_end": 0,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 0,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

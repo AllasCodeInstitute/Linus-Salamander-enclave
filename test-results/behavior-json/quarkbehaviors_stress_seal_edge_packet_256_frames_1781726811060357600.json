@@ -1,0 +1,18 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "quarkbehaviors_stress_seal_edge_packet_256_frames_1781726811060357600",
+  "category": "QuarkBehaviors",
+  "test_kind": "stress",
+  "scope": "function",
+  "name": "seal_edge_packet_256_frames",
+  "status": "passed",
+  "duration_ns": 7305700,
+  "narrative": "Stresses the sealing function with repeated unique sessions.",
+  "metrics": [
+    { "name": "frames", "value": "256", "unit": "count" },
+    { "name": "total_bytes", "value": "17042", "unit": "bytes" }
+  ],
+  "assertions": [
+    { "name": "all stress frames include AEAD overhead", "passed": true }
+  ]
+}

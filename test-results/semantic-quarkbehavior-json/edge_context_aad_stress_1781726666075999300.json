@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "edge_context_aad_stress_1781726666075999300",
+  "category": "QuarkBehaviors",
+  "function_name": "edge_context_aad",
+  "test_kind": "stress",
+  "status": "passed",
+  "iterations": 64,
+  "wall_ns": 653700,
+  "executions_per_second": 97904.237418,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 0,
+  "ram_bytes_end": 0,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 0,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

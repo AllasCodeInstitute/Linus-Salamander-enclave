@@ -24,6 +24,40 @@ struct {
 // Porta dedicada aos Agentes (ex: 9999)
 #define AGENT_PORT 9999
 
+// CVE-LSES-009: FNV-1a 64-bit hash with Murmur finalizer instead of plain XOR.
+// XOR-based hashing has trivial collision resistance: any two MAC+IP pairs that
+// XOR to the same 64-bit value collide. FNV-1a + mixing makes collisions
+// computationally hard while staying within BPF verifier constraints.
+static __always_inline __u64 compute_identity_hash(const __u8 mac[6], __u32 saddr)
+{
+    // FNV-1a 64-bit offset basis and prime
+    __u64 h = 0xcbf29ce484222325ULL;
+    const __u64 fnv_prime = 0x00000100000001b3ULL;
+
+    // Unrolled: XOR each MAC byte into the hash then multiply by the FNV prime
+    h ^= (__u64)mac[0]; h *= fnv_prime;
+    h ^= (__u64)mac[1]; h *= fnv_prime;
+    h ^= (__u64)mac[2]; h *= fnv_prime;
+    h ^= (__u64)mac[3]; h *= fnv_prime;
+    h ^= (__u64)mac[4]; h *= fnv_prime;
+    h ^= (__u64)mac[5]; h *= fnv_prime;
+
+    // Mix in the 4-byte source IP
+    h ^= (__u64)(saddr & 0xff);         h *= fnv_prime;
+    h ^= (__u64)((saddr >> 8) & 0xff);  h *= fnv_prime;
+    h ^= (__u64)((saddr >> 16) & 0xff); h *= fnv_prime;
+    h ^= (__u64)((saddr >> 24) & 0xff); h *= fnv_prime;
+
+    // Murmur3-style finalizer: avalanches all input bits through the output
+    h ^= h >> 33;
+    h *= 0xff51afd7ed558ccdULL;
+    h ^= h >> 33;
+    h *= 0xc4ceb9fe1a85ec53ULL;
+    h ^= h >> 33;
+
+    return h;
+}
+
 SEC("xdp")
 int xdp_pass_to_zig(struct xdp_md *ctx) {
     void *data_end = (void *)(long)ctx->data_end;
@@ -43,18 +77,14 @@ int xdp_pass_to_zig(struct xdp_md *ctx) {
 
         if (udp->dest == __constant_htons(AGENT_PORT)) {
             // 1. Validação de Identidade Ultraveloz (Tripartite Hash)
-            // Simulação simplificada: Hash(MAC + IP)
-            __u64 identity_hash = 0;
-            // Combina os 6 bytes do MAC com os 4 bytes do IP para um hash rápido
-            for(int i=0; i<6; i++) identity_hash ^= ((__u64)eth->h_source[i] << (i*8));
-            identity_hash ^= ((__u64)ip->saddr << 32);
+            __u64 identity_hash = compute_identity_hash(eth->h_source, ip->saddr);
 
             __u32 *status = bpf_map_lookup_elem(&authorized_agents, &identity_hash);
-            
+
             if (!status || *status == 0) {
                 // Se não está no mapa ou precisa de desafio, passamos para o Kernel
                 // para que o SecuritySystemAgent no Rust/Zig capture e dispare o Passkey.
-                return XDP_PASS; 
+                return XDP_PASS;
             }
 
             // 2. REDIRECIONA DIRETO PARA O ZIG! (Zero-Copy)

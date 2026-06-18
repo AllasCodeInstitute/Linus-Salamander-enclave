@@ -1,0 +1,17 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "quarkbehaviors_security_seal_edge_packet_replay_guard_1781726811037648100",
+  "category": "QuarkBehaviors",
+  "test_kind": "security",
+  "scope": "function",
+  "name": "seal_edge_packet_replay_guard",
+  "status": "passed",
+  "duration_ns": 50900,
+  "narrative": "Verifies function-level replay prevention before a duplicate seal can occur.",
+  "metrics": [
+    { "name": "duplicate_session_id", "value": "3000", "unit": "id" }
+  ],
+  "assertions": [
+    { "name": "duplicate session is rejected", "passed": true }
+  ]
+}

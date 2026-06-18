@@ -26,8 +26,9 @@ pub fn main() !void {
     std.debug.print("[LSES] Consumer public key: {s}\n", .{&cons_pk_hex});
 
     // 2. Put a secret
+    // CVE-LSES-005: Demo uses a placeholder; never embed real secrets in source.
     const key = "MY_SECURE_API_TOKEN";
-    const val = "ls_secret_super_secure_token_12345";
+    const val = "REPLACE_WITH_YOUR_ACTUAL_SECRET";
     std.debug.print("[LSES] Storing secret. Key: '{s}' (Plaintext will NOT be persisted to disk!)\n", .{key});
     
     try enclave.putSecret(key, val);

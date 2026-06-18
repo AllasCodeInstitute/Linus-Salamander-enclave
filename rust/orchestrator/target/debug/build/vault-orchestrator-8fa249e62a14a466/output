@@ -1,9 +1,9 @@
-cargo:rustc-link-search=native=../../../
+cargo:rustc-link-search=native=\\?\D:\www\Freelas\PROJETOS_OPENSOURCE\MEUS\@purecore\1ntruder\Linus-novo
 cargo:rustc-link-lib=static=fast_buffer
-cargo:rustc-link-search=native=../enclave/target/debug
+cargo:rustc-link-search=native=\\?\D:\www\Freelas\PROJETOS_OPENSOURCE\MEUS\@purecore\1ntruder\Linus-novo\rust\enclave\target\debug
 cargo:rustc-link-lib=static=vault_enclave
 cargo:rustc-link-lib=ntdll
 cargo:rustc-link-lib=bcrypt
 cargo:rustc-link-lib=advapi32
-cargo:rerun-if-changed=../../../fast_buffer.lib
-cargo:rerun-if-changed=../enclave/target/debug/vault_enclave.lib
+cargo:rerun-if-changed=\\?\D:\www\Freelas\PROJETOS_OPENSOURCE\MEUS\@purecore\1ntruder\Linus-novo\zig\fast_buffer.zig
+cargo:rerun-if-changed=\\?\D:\www\Freelas\PROJETOS_OPENSOURCE\MEUS\@purecore\1ntruder\Linus-novo\rust\enclave\target\debug\vault_enclave.lib

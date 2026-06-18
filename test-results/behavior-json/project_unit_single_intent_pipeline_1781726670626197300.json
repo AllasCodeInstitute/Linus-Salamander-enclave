@@ -1,0 +1,18 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "project_unit_single_intent_pipeline_1781726670626197300",
+  "category": "Project",
+  "test_kind": "unit",
+  "scope": "intent",
+  "name": "single_intent_pipeline",
+  "status": "passed",
+  "duration_ns": 9201200,
+  "narrative": "Composes semantic key derivation, AEAD envelope, and signing as a common Intent flow.",
+  "metrics": [
+    { "name": "opened_len", "value": "38", "unit": "bytes" }
+  ],
+  "assertions": [
+    { "name": "intent payload survives composition", "passed": true },
+    { "name": "intent signature emitted", "passed": true }
+  ]
+}

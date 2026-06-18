@@ -14,7 +14,12 @@ extern "C" {
     fn init_af_xdp() -> i32;
     fn poll_packet(out_packet: *mut AgentPacket) -> bool;
     fn init_enclave_keys();
-    fn noise_sign_payload(payload_ptr: *const u8, len: usize, out_sig: *mut u8) -> i32;
+    fn noise_sign_payload(
+        payload_ptr: *const u8,
+        len: usize,
+        out_sig: *mut u8,
+        session_id: u64,
+    ) -> i32;
 }
 
 #[test]
@@ -40,7 +45,7 @@ fn test_system_integration_full_pipeline() {
     if has_data {
         let mut signature = [0u8; 64];
         let status = unsafe {
-            noise_sign_payload(packet.payload_ptr, packet.len, signature.as_mut_ptr())
+            noise_sign_payload(packet.payload_ptr, packet.len, signature.as_mut_ptr(), packet.session_id)
         };
         assert_eq!(status, 0, "Full pipeline signing failed");
     }
@@ -54,7 +59,9 @@ fn test_acceptance_criteria_latency_threshold() {
     let mut sig = [0u8; 64];
     
     let start = std::time::Instant::now();
-    unsafe { noise_sign_payload(payload.as_ptr(), payload.len(), sig.as_mut_ptr()); }
+    unsafe {
+        noise_sign_payload(payload.as_ptr(), payload.len(), sig.as_mut_ptr(), 73_000);
+    }
     let elapsed = start.elapsed();
     
     assert!(elapsed < std::time::Duration::from_millis(10), "Acceptance criteria failed: latency > 10ms");

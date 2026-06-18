@@ -26,9 +26,9 @@
 ### Fase 1 — Hardening base (semanas 1–4)
 - [x] Remover `static mut` inseguro no core Rust, trocar por estado sincronizado (`OnceLock<Mutex<...>>`).
 - [x] Adicionar validações de ponteiro nulo nas bordas FFI.
-- [ ] Trocar XOR de coreografia por AEAD (AES-GCM ou ChaCha20-Poly1305) por hop/contexto.
-- [ ] Zeroization de chaves e buffers sensíveis.
-- [ ] Testes unitários de erro e replay em API C.
+- [x] Trocar XOR de coreografia por AEAD (AES-GCM ou ChaCha20-Poly1305) por hop/contexto.
+- [x] Zeroization de chaves e buffers sensíveis.
+- [x] Testes unitários de erro e replay em API C.
 
 ### Fase 2 — Segurança criptográfica real (semanas 5–10)
 - [ ] Implementar envelope completo (`snapshot_body`, `snapshot_id`, dual signatures).
@@ -51,4 +51,3 @@
 1. **Hardening da base Rust FFI** (thread-safe state + checks de ponteiro).
 2. **Preparar migração da coreografia XOR para AEAD por aresta**.
 3. **Expandir suíte de testes de regressão e misuse cases**.
-

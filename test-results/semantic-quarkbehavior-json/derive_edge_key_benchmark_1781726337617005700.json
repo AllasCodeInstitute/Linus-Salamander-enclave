@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "derive_edge_key_benchmark_1781726337617005700",
+  "category": "QuarkBehaviors",
+  "function_name": "derive_edge_key",
+  "test_kind": "benchmark",
+  "status": "passed",
+  "iterations": 128,
+  "wall_ns": 2735000,
+  "executions_per_second": 46800.731261,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 0,
+  "ram_bytes_end": 0,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 0,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

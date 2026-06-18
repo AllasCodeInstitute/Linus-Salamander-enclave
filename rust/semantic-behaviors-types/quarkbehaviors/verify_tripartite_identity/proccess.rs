@@ -3,6 +3,8 @@ pub extern "C" fn verify_tripartite_identity(
     id: *const TripartiteIdentity,
     expected_hash: *const u8,
 ) -> i32 {
+    use subtle::ConstantTimeEq;
+
     if id.is_null() || expected_hash.is_null() {
         return ERR_NULL_POINTER;
     }
@@ -15,7 +17,9 @@ pub extern "C" fn verify_tripartite_identity(
 
     let result = hasher.finalize();
     let expected = unsafe { core::slice::from_raw_parts(expected_hash, 32) };
-    if result.as_slice() == expected {
+    // CVE-LSES-008: Use constant-time comparison to prevent timing side-channels
+    // that could allow an attacker to infer bytes of the expected hash.
+    if result.as_slice().ct_eq(expected).into() {
         0
     } else {
         ERR_AUTHENTICATION

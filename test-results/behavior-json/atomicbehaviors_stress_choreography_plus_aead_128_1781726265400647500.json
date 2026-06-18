@@ -1,0 +1,18 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "atomicbehaviors_stress_choreography_plus_aead_128_1781726265400647500",
+  "category": "AtomicBehaviors",
+  "test_kind": "stress",
+  "scope": "functionality",
+  "name": "choreography_plus_aead_128",
+  "status": "passed",
+  "duration_ns": 11728800,
+  "narrative": "Combines choreography transformation with AEAD sealing under stress.",
+  "metrics": [
+    { "name": "flows", "value": "128", "unit": "count" },
+    { "name": "sealed_bytes", "value": "7680", "unit": "bytes" }
+  ],
+  "assertions": [
+    { "name": "stress choreography produced sealed output", "passed": true }
+  ]
+}
