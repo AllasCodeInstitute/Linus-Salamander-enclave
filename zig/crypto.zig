@@ -135,6 +135,13 @@ pub const LocalDevKekProvider = struct {
         };
     }
 
+    /// Initialize directly from a 32-byte key (e.g. from sealed_state.unsealKeys).
+    /// Preferred over initFromHex because no hex string with key material is
+    /// ever allocated in the heap.
+    pub fn initFromBytes(key_id: []const u8, key: [32]u8) LocalDevKekProvider {
+        return .{ .key_id = key_id, .kek = key };
+    }
+
     pub fn provider(self: *LocalDevKekProvider) KekProvider {
         return .{
             .key_id = self.key_id,
@@ -605,6 +612,31 @@ pub const KekResolver = struct {
     }
 };
 
+/// MIASMA-WORM / supply-chain defense: registry of trusted enclave public keys.
+///
+/// A worm or supply-chain-poisoned enclave binary that generates its own key pair
+/// will NOT be in this registry, so consumers that load it would immediately fail
+/// `verifySnapshot`. This provides a second authentication factor beyond the
+/// chain-of-custody check: even a valid chain signed by a fresh key is rejected
+/// unless the operator has explicitly registered that key as trusted.
+///
+/// Keys in this registry are Ed25519 public keys (32 bytes). Operators add them
+/// via the `LSES_TRUSTED_ENCLAVE_KEYS` environment variable (comma-separated hex).
+///
+/// Comparison uses `std.mem.eql` — public keys are not secret material, so
+/// variable-time comparison is acceptable and constant-time is not required.
+pub const TrustedKeyRegistry = struct {
+    keys: []const [32]u8,
+
+    /// Returns true if `key` is in the trusted set, false otherwise.
+    pub fn isTrusted(self: TrustedKeyRegistry, key: [32]u8) bool {
+        for (self.keys) |trusted| {
+            if (std.mem.eql(u8, &trusted, &key)) return true;
+        }
+        return false;
+    }
+};
+
 pub const VerificationContext = struct {
     mode: VerificationMode,
     trusted_chain_head: ?[32]u8,
@@ -613,6 +645,10 @@ pub const VerificationContext = struct {
     policy: AccessPolicy,
     nonce_registry: *NonceRegistry,
     kek_resolver: *KekResolver,
+    /// Optional trusted-key registry. When non-null, the enclave public key used
+    /// to sign the snapshot MUST appear in this registry. Null disables the check
+    /// (legacy / first-boot mode; operators should enable pinning in production).
+    trusted_enclave_keys: ?*const TrustedKeyRegistry,
 };
 
 /// Zero-Bypass Snapshot Authenticator
@@ -675,6 +711,20 @@ pub fn verifySnapshot(
     }
     if (!std.mem.eql(u8, envelope.snapshot_body.consumer_public_key_id, ctx.verification_keys.consumer_key_id)) {
         return LsesError.UnauthorizedConsumer;
+    }
+
+    // 9.5. MIASMA-WORM / supply-chain defense: verify the enclave key that
+    // signed this snapshot is in the operator-configured trusted registry.
+    //
+    // Without this check, a worm that injects a fresh key pair at startup
+    // (or a supply-chain-poisoned binary that generates its own keys) would
+    // produce perfectly valid signatures that pass all prior checks. The
+    // registry is the only out-of-band anchor that ties a snapshot to an
+    // enclave binary the operator has explicitly trusted.
+    if (ctx.trusted_enclave_keys) |registry| {
+        if (!registry.isTrusted(ctx.verification_keys.enclave_public_key)) {
+            return LsesError.UnauthorizedConsumer;
+        }
     }
 
     // 10. Validar policy

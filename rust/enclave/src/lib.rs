@@ -3,6 +3,8 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
 };
 use ed25519_dalek::{Signer, SigningKey};
+// ed25519_dalek::{VerifyingKey, Signature} are accessed via fully-qualified paths
+// in the quarkbehavior files to keep each behavior self-documenting.
 use hmac::{Hmac, Mac};
 use rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256};
@@ -107,6 +109,8 @@ include!("../../semantic-behaviors-types/quarkbehaviors/open_edge_packet/procces
 include!("../../semantic-behaviors-types/quarkbehaviors/choreograph_packet/proccess.rs");
 
 include!("../../semantic-behaviors-types/quarkbehaviors/noise_sign_payload/proccess.rs");
+
+include!("../../semantic-behaviors-types/quarkbehaviors/noise_sign_scoped_payload/proccess.rs");
 
 #[cfg(test)]
 mod tests {

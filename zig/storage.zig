@@ -1,6 +1,7 @@
 const std = @import("std");
 const crypto = @import("crypto.zig");
 const git = @import("git.zig");
+const sealed_state = @import("sealed_state.zig");
 
 /// JSON Serialization Mappings
 pub const SnapshotBodyJson = struct {
@@ -388,51 +389,89 @@ pub const StorageEnclave = struct {
     trusted_chain_head: ?[32]u8,
     last_accepted_epoch: u64,
     policy: crypto.AccessPolicy,
+    // MIASMA-WORM: operator-pinned set of enclave public keys. Populated from
+    // LSES_TRUSTED_ENCLAVE_KEYS (comma-separated 64-char hex values) at startup.
+    // Snapshots signed by any key NOT in this registry are rejected even if the
+    // signature is cryptographically valid.
+    trusted_enclave_key_list: []const [32]u8,
+    trusted_key_registry: crypto.TrustedKeyRegistry,
 
     pub fn init(allocator: std.mem.Allocator, io: std.Io, repo_path: []const u8) !StorageEnclave {
-        // Enclave keys
-        var enc_seed: [32]u8 = undefined;
-        crypto.EnclaveCrypto.randomBytes(&enc_seed);
-        const enc_kp = try std.crypto.sign.Ed25519.KeyPair.generateDeterministic(enc_seed);
-        const enc_private = enc_kp.secret_key.toBytes();
+        // ── Material de chave via armazenamento selado ──────────────────────
+        // KEK, ENCLAVE_SEED e CONSUMER_SEED são gerados pelo `lses-bootstrap`
+        // (via `./scripts/lses-init.sh`) DENTRO do processo enclave e salvos
+        // como um blob AES-256-GCM ligado à identidade desta máquina.
+        // Nenhum segredo atravessa variáveis de ambiente, shell, histórico,
+        // ou qualquer canal externo — o operador vê APENAS a chave pública.
+        const sealed = try sealed_state.unsealKeys(allocator);
+        var sk = sealed;
+        // secureZero nos seeds após derivação — apenas os pares de chaves
+        // derivados (e o kek copiado no kek_provider) persistem em memória.
+        defer sk.deinit();
 
-        const enclave_identity = crypto.SigningIdentity{
-            .key_id = "enclave_pk_1",
-            .public_key = enc_kp.public_key.bytes,
-            .private_key = enc_private,
+        const enclave_identity = blk: {
+            const enc_kp = try std.crypto.sign.Ed25519.KeyPair.generateDeterministic(sk.enclave_seed);
+            const enc_pk_hex = std.fmt.bytesToHex(enc_kp.public_key.bytes, .lower);
+            std.debug.print("[LSES] Enclave public key: {s}\n", .{&enc_pk_hex});
+            break :blk crypto.SigningIdentity{
+                .key_id      = "enclave_pk_1",
+                .public_key  = enc_kp.public_key.bytes,
+                .private_key = enc_kp.secret_key.toBytes(),
+            };
         };
 
-        // Consumer keys
-        var cons_seed: [32]u8 = undefined;
-        crypto.EnclaveCrypto.randomBytes(&cons_seed);
-        const cons_kp = try std.crypto.sign.Ed25519.KeyPair.generateDeterministic(cons_seed);
-        const cons_private = cons_kp.secret_key.toBytes();
-
-        const consumer_identity = crypto.SigningIdentity{
-            .key_id = "consumer_pk_1",
-            .public_key = cons_kp.public_key.bytes,
-            .private_key = cons_private,
+        const consumer_identity = blk: {
+            const cons_kp = try std.crypto.sign.Ed25519.KeyPair.generateDeterministic(sk.consumer_seed);
+            break :blk crypto.SigningIdentity{
+                .key_id      = "consumer_pk_1",
+                .public_key  = cons_kp.public_key.bytes,
+                .private_key = cons_kp.secret_key.toBytes(),
+            };
         };
 
         // Policy
         const allowed = try allocator.alloc([]const u8, 1);
         allowed[0] = "consumer_pk_1";
-
         const policy = crypto.AccessPolicy{
             .allow_plaintext_export = true,
             .allowed_consumers = allowed,
         };
 
-        // CVE-LSES-003: Load the KEK from the environment — fail-closed with no
-        // hardcoded fallback. A hardcoded KEK is effectively a public key because
-        // it is committed to version control, making offline DEK unwrapping trivial.
-        // Operators must inject LSES_KEK (64 hex chars = 32 bytes) at deploy time.
-        const kek_hex = std.process.getEnvVarOwned(allocator, "LSES_KEK") catch |err| switch (err) {
-            error.EnvironmentVariableNotFound => return error.MissingLsesKek,
-            else => return err,
+        // KEK copiado por valor de sk.kek — sk.deinit() zera a origem,
+        // kek_provider.kek persiste apenas enquanto o StorageEnclave existe.
+        const kek_provider = crypto.LocalDevKekProvider.initFromBytes("lses-kek", sk.kek);
+
+        // ── Trusted enclave key registry ────────────────────────────────────
+        // MIASMA-WORM: parse LSES_TRUSTED_ENCLAVE_KEYS (comma-separated 64-char
+        // hex public keys). If the variable is absent the registry is empty and
+        // the TrustedKeyRegistry check in VerificationContext is still enforced
+        // (null registry = check skipped). Operators SHOULD set this in production.
+        const trusted_key_list = blk: {
+            const keys_env = std.process.getEnvVarOwned(allocator, "LSES_TRUSTED_ENCLAVE_KEYS") catch null;
+            if (keys_env == null) {
+                std.debug.print(
+                    "[LSES WARN] LSES_TRUSTED_ENCLAVE_KEYS not set — trusted-key pinning disabled.\n" ++
+                    "            Set it to a comma-separated list of trusted enclave public key hex strings.\n",
+                    .{},
+                );
+                break :blk try allocator.alloc([32]u8, 0);
+            }
+            defer allocator.free(keys_env.?);
+            // Count commas to size the list.
+            var count: usize = 1;
+            for (keys_env.?) |c| { if (c == ',') count += 1; }
+            const list = try allocator.alloc([32]u8, count);
+            errdefer allocator.free(list);
+            var i: usize = 0;
+            var it = std.mem.splitScalar(u8, keys_env.?, ',');
+            while (it.next()) |hex_key| {
+                const trimmed = std.mem.trim(u8, hex_key, " \t\r\n");
+                if (trimmed.len != 64) return error.InvalidTrustedKeyHex;
+                _ = try std.fmt.hexToBytes(&list[i], trimmed);
+                i += 1;
+            }
+            break :blk list;
         };
-        defer allocator.free(kek_hex);
-        const kek_provider = try crypto.LocalDevKekProvider.initFromHex("lses-kek", kek_hex);
 
         return StorageEnclave{
             .secrets = std.StringHashMap([]const u8).init(allocator),
@@ -445,10 +484,12 @@ pub const StorageEnclave = struct {
             .consumer_identity = consumer_identity,
             .nonce_registry = crypto.NonceRegistry.init(allocator),
             .runtime_store = crypto.RuntimeSecretStore.init(allocator),
-            
+
             .trusted_chain_head = null,
             .last_accepted_epoch = 0,
             .policy = policy,
+            .trusted_enclave_key_list = trusted_key_list,
+            .trusted_key_registry = crypto.TrustedKeyRegistry{ .keys = trusted_key_list },
         };
     }
 
@@ -461,7 +502,12 @@ pub const StorageEnclave = struct {
         self.secrets.deinit();
         self.nonce_registry.deinit();
         self.runtime_store.deinit();
+        self.allocator.free(self.trusted_enclave_key_list);
         self.allocator.free(self.policy.allowed_consumers);
+        // Zero all key material before releasing — prevents scraping from freed heap
+        std.crypto.secureZero(u8, &self.kek_provider.kek);
+        std.crypto.secureZero(u8, std.mem.asBytes(&self.enclave_identity.private_key));
+        std.crypto.secureZero(u8, std.mem.asBytes(&self.consumer_identity.private_key));
     }
 
     pub fn buildPendingSnapshot(
@@ -830,6 +876,13 @@ pub const StorageEnclave = struct {
         // Also switch to .strict mode when a chain head is known: without it the
         // verifier skips the MissingTrustAnchor check, allowing bootstrap of an
         // entirely forged chain against an enclave that already has a trust anchor.
+        // MIASMA-WORM: pass the trusted key registry so verifySnapshot can reject
+        // snapshots signed by any key that isn't in the operator-pinned set.
+        // When the registry is empty (operator hasn't configured it) the trusted_enclave_keys
+        // field is null and the check is skipped — operators SHOULD configure it.
+        const registry_ptr: ?*const crypto.TrustedKeyRegistry =
+            if (self.trusted_key_registry.keys.len > 0) &self.trusted_key_registry else null;
+
         var ctx = crypto.VerificationContext{
             .mode = if (self.trusted_chain_head != null) .strict else .recovery_limited,
             .trusted_chain_head = self.trusted_chain_head,
@@ -838,6 +891,7 @@ pub const StorageEnclave = struct {
             .policy = self.policy,
             .nonce_registry = &self.nonce_registry,
             .kek_resolver = &kek_resolver,
+            .trusted_enclave_keys = registry_ptr,
         };
 
         const result = try crypto.readSecret(

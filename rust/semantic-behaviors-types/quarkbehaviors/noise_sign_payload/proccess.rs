@@ -1,3 +1,8 @@
+// DEPRECATED: This function signs raw bytes with no scope, recipient, or
+// operation binding. A MIASMA worm that obtains this enclave's signing key can
+// use it to sign ANY payload for ANY target. Use `noise_sign_scoped_payload` +
+// `noise_verify_scoped_signature` for all new code: they bind every signature
+// to a specific recipient agent and operation, breaking the worm's forwarding path.
 #[no_mangle]
 pub extern "C" fn noise_sign_payload(
     payload_ptr: *const u8,

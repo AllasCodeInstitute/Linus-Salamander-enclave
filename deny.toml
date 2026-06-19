@@ -1,0 +1,91 @@
+# cargo-deny configuration — run with: cargo deny check
+# Prevents building against known-vulnerable, duplicated, or unlicensed crates.
+# This is the primary supply-chain defense for the Rust enclave.
+
+[graph]
+# Check all targets; don't skip platform-specific crates.
+targets = []
+
+# ─── Vulnerability advisories ────────────────────────────────────────────────
+[advisories]
+version = 2
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+
+# Block any build that includes a crate with a published CVE.
+# We never want to ship with a known-vulnerable dependency, even in a transitive chain.
+vulnerability = "deny"
+
+# Yanked crates may have been yanked because of a security issue; reject them.
+yanked = "deny"
+
+# Warn on unmaintained crates; these accumulate CVEs silently over time.
+unmaintained = "warn"
+
+# No explicit ignores — if a CVE appears we want to fix the root cause.
+ignore = []
+
+# ─── License policy ──────────────────────────────────────────────────────────
+[licenses]
+version = 2
+# Only permissive licenses are allowed. Copyleft (GPL, AGPL) would infect the
+# enclave library and impose distribution obligations we cannot meet.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "ISC",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "Zlib",
+]
+deny = [
+    "GPL-2.0",
+    "GPL-3.0",
+    "AGPL-3.0",
+    "LGPL-2.0",
+    "LGPL-2.1",
+    "LGPL-3.0",
+]
+copyleft = "deny"
+allow-osi-fsf-free = "neither"
+
+# ─── Banned crates & duplicate versions ──────────────────────────────────────
+[bans]
+# Duplicate versions of a crate can occur when two deps pin different versions.
+# In a cryptographic library this is especially dangerous: the wrong version of
+# an RNG or cipher can be silently linked in alongside the correct one.
+multiple-versions = "deny"
+
+# Wildcards in Cargo.toml ("*") allow any version, which can pull in regressions.
+wildcards = "deny"
+
+highlight = "all"
+
+# Crates explicitly forbidden regardless of version.
+deny = [
+    # openssl-sys links to the system OpenSSL — use the pure-Rust ring/rustls stack
+    { name = "openssl-sys" },
+    { name = "openssl" },
+    # Native TLS wrappers introduce unpinned system library deps
+    { name = "native-tls" },
+    # The `js-sys` / `wasm-bindgen` family must never appear in native builds
+    { name = "js-sys" },
+    { name = "wasm-bindgen" },
+]
+
+# ─── Crate source policy ─────────────────────────────────────────────────────
+[sources]
+# Reject crates from unknown registries (could be a typosquat or private mirror
+# that silently injects malicious code).
+unknown-registry = "deny"
+
+# Reject crates pulled from arbitrary git repos unless explicitly listed below.
+# Git dependencies bypass the crates.io audit trail.
+unknown-git = "deny"
+
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
