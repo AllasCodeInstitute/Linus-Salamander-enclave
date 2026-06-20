@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BDD Vault | LSES Gherkin Comptime Runner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = { darkMode:'class', theme:{ extend:{ fontFamily:{ sans:['Outfit','sans-serif'], mono:['JetBrains Mono','monospace'] } } } }</script>
+<style>
+  body { background:#030712; background-image:radial-gradient(at 0% 0%,rgba(139,92,246,.07) 0,transparent 50%),radial-gradient(at 100% 0%,rgba(6,182,212,.05) 0,transparent 50%),radial-gradient(at 50% 100%,rgba(16,185,129,.03) 0,transparent 50%); background-attachment:fixed; }
+  .glass    { backdrop-filter:blur(16px); background:rgba(11,17,33,.75); border:1px solid rgba(255,255,255,.07); box-shadow:0 8px 32px rgba(0,0,0,.37); }
+  .glass-sm { backdrop-filter:blur(12px); background:rgba(11,17,33,.5); border:1px solid rgba(255,255,255,.06); }
+
+  /* nav */
+  .top-nav { position:fixed; top:0; left:0; right:0; z-index:50; backdrop-filter:blur(24px) saturate(180%); background:rgba(3,7,18,.88); border-bottom:1px solid rgba(255,255,255,.06); }
+  .nav-link { padding:.3rem .7rem; border-radius:.5rem; font-size:.68rem; font-weight:600; letter-spacing:.06em; color:#9ca3af; transition:all .15s; font-family:'JetBrains Mono',monospace; }
+  .nav-link:hover { color:#e5e7eb; background:rgba(255,255,255,.06); }
+  .nav-link.here  { color:#a78bfa; background:rgba(139,92,246,.1); }
+
+  /* scrollbar */
+  .scroll-thin::-webkit-scrollbar { width:5px; }
+  .scroll-thin::-webkit-scrollbar-track { background:transparent; }
+  .scroll-thin::-webkit-scrollbar-thumb { background:rgba(255,255,255,.12); border-radius:3px; }
+
+  /* Gherkin tree */
+  .gh-feature  { color:#c084fc; font-weight:700; }
+  .gh-rule     { color:#67e8f9; font-weight:600; }
+  .gh-scenario { color:#fde68a; font-weight:600; }
+  .gh-given    { color:#86efac; }
+  .gh-when     { color:#67e8f9; }
+  .gh-then     { color:#c4b5fd; }
+  .gh-and, .gh-but, .gh-star { color:#d1d5db; }
+
+  .kw-badge { font-size:.65rem; font-family:'JetBrains Mono',monospace; padding:.1rem .45rem; border-radius:.3rem; font-weight:700; letter-spacing:.04em; display:inline-block; margin-right:.4rem; min-width:3.2rem; text-align:right; }
+  .kw-feature  { background:rgba(192,132,252,.15); color:#c084fc; }
+  .kw-rule     { background:rgba(103,232,249,.12); color:#67e8f9; }
+  .kw-scenario { background:rgba(253,230,138,.12); color:#fde68a; }
+  .kw-given    { background:rgba(134,239,172,.1);  color:#86efac; }
+  .kw-when     { background:rgba(103,232,249,.1);  color:#67e8f9; }
+  .kw-then     { background:rgba(196,181,253,.1);  color:#c4b5fd; }
+  .kw-and      { background:rgba(209,213,219,.08); color:#d1d5db; }
+  .kw-but      { background:rgba(209,213,219,.08); color:#d1d5db; }
+  .kw-star     { background:rgba(209,213,219,.08); color:#d1d5db; }
+
+  /* scenario status dot */
+  .sc-dot { width:.45rem; height:.45rem; border-radius:50%; flex-shrink:0; margin-top:.25rem; }
+  .sc-dot-idle    { background:#374151; }
+  .sc-dot-running { background:#fbbf24; animation:blink .8s ease-in-out infinite; }
+  .sc-dot-pass    { background:#10b981; box-shadow:0 0 5px #10b981; }
+  .sc-dot-fail    { background:#f43f5e; box-shadow:0 0 5px #f43f5e; }
+
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+  @keyframes fadeSlide { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+  .anim-in { animation:fadeSlide .25s ease-out forwards; }
+
+  /* terminal */
+  .terminal { font-family:'JetBrains Mono',monospace; font-size:.68rem; line-height:1.65; }
+  .tl-feature  { color:#c084fc; }
+  .tl-rule     { color:#67e8f9; }
+  .tl-scenario { color:#fde68a; }
+  .tl-step     { color:#86efac; }
+  .tl-log      { color:#4b5563; }
+  .tl-start    { color:#38bdf8; }
+  .tl-done     { color:#10b981; font-weight:600; }
+  .tl-error    { color:#f43f5e; font-weight:600; }
+  .tl-warn     { color:#f59e0b; }
+</style>
+</head>
+<body class="text-gray-100 min-h-screen font-sans">
+
+<!-- ── Nav ─────────────────────────────────────────────────────────────── -->
+<nav class="top-nav">
+  <div class="max-w-[1400px] mx-auto px-6 h-14 flex items-center gap-5">
+    <a href="/" class="flex items-center gap-2 shrink-0">
+      <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-violet-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-violet-500/20">
+        <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+      </div>
+      <span class="font-bold text-sm tracking-wide">LSES <span class="text-cyan-400">TESTS</span></span>
+    </a>
+    <div class="flex items-center gap-1">
+      <a href="/"       class="nav-link">Dashboard</a>
+      <a href="/stress" class="nav-link">Stress</a>
+      <a href="/unit"   class="nav-link">Unit</a>
+      <a href="/bdd"    class="nav-link here">BDD</a>
+      <a href="/synk"   class="nav-link">Sync</a>
+      <a href="/chaos"  class="nav-link">Chaos</a>
+    </div>
+    <div class="ml-auto flex items-center gap-4">
+      <!-- SSE dot -->
+      <div class="flex items-center gap-2 text-xs font-mono">
+        <span id="sseDot" class="sc-dot sc-dot-idle"></span>
+        <span id="sseLabel" class="text-gray-500">disconnected</span>
+      </div>
+      <!-- Run button -->
+      <button id="btnRun" onclick="runBDD()" class="flex items-center gap-2 px-4 py-2 text-xs font-semibold font-mono rounded-lg transition-all active:scale-95 shadow-md shadow-violet-500/20" style="background:linear-gradient(to right,#7c3aed,#0e7490);color:white">
+        <svg id="btnRunIcon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span id="btnRunLabel">RUN BDD SUITE</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Main ─────────────────────────────────────────────────────────────── -->
+<main class="max-w-[1400px] mx-auto px-6 pt-20 pb-12 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+  <!-- ── LEFT: Gherkin Tree ── -->
+  <section class="lg:col-span-5 flex flex-col gap-4">
+
+    <!-- Header -->
+    <div class="glass rounded-2xl p-5">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-8 h-8 rounded-xl flex items-center justify-center" style="background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.3)">
+          <svg class="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        </div>
+        <div>
+          <h2 class="font-bold text-sm">BDD <span class="text-violet-400">VAULT</span></h2>
+          <p class="text-[11px] text-gray-400 font-mono">LSES Gherkin Comptime Runner</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <div class="glass-sm rounded-lg p-2.5 text-center">
+          <div class="text-lg font-bold text-violet-400" id="statFeatures">0</div>
+          <div class="text-[10px] text-gray-500 font-mono uppercase tracking-wide">Features</div>
+        </div>
+        <div class="glass-sm rounded-lg p-2.5 text-center">
+          <div class="text-lg font-bold text-cyan-400" id="statScenarios">0</div>
+          <div class="text-[10px] text-gray-500 font-mono uppercase tracking-wide">Scenarios</div>
+        </div>
+        <div class="glass-sm rounded-lg p-2.5 text-center">
+          <div class="text-lg font-bold" id="statResult">—</div>
+          <div class="text-[10px] text-gray-500 font-mono uppercase tracking-wide">Result</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Binary info -->
+    <div class="glass-sm rounded-xl px-4 py-3">
+      <div class="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-1.5">Binary</div>
+      <code class="text-xs text-violet-300 break-all">BDD.zig/zig-out/bin/zig_comptime_bdd_gherkin_keyword.exe</code>
+      <div class="flex gap-2 mt-2">
+        <span class="text-[10px] bg-violet-500/10 text-violet-400 border border-violet-500/20 px-1.5 py-0.5 rounded font-mono">zig 0.14</span>
+        <span class="text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-1.5 py-0.5 rounded font-mono">comptime</span>
+        <span class="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-mono">SSE live</span>
+      </div>
+    </div>
+
+    <!-- Gherkin tree -->
+    <div class="glass rounded-2xl flex-1 flex flex-col min-h-[400px]">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-white/5">
+        <span class="text-xs font-mono text-gray-400">Gherkin Tree</span>
+        <span id="treeStatus" class="text-[11px] font-mono text-gray-600">aguardando execução...</span>
+      </div>
+      <div id="gherkinTree" class="flex-1 overflow-y-auto scroll-thin p-4 text-xs font-mono">
+        <div class="text-gray-700 text-center mt-8">
+          Clique em <span class="text-violet-400 font-semibold">RUN BDD SUITE</span> para executar<br>
+          <span class="text-gray-800">a árvore Gherkin será construída em tempo real</span>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ── RIGHT: Terminal + Stats ── -->
+  <section class="lg:col-span-7 flex flex-col gap-4">
+
+    <!-- Last run stats -->
+    <div id="statsBar" class="glass rounded-2xl p-5 hidden">
+      <div class="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-3">Último resultado</div>
+      <div class="grid grid-cols-4 gap-3">
+        <div class="glass-sm rounded-lg p-3 text-center">
+          <div class="text-xl font-bold text-emerald-400" id="rPassed">0</div>
+          <div class="text-[10px] text-gray-500 font-mono">passed</div>
+        </div>
+        <div class="glass-sm rounded-lg p-3 text-center">
+          <div class="text-xl font-bold text-red-400" id="rFailed">0</div>
+          <div class="text-[10px] text-gray-500 font-mono">failed</div>
+        </div>
+        <div class="glass-sm rounded-lg p-3 text-center">
+          <div class="text-xl font-bold text-cyan-400" id="rTotal">0</div>
+          <div class="text-[10px] text-gray-500 font-mono">total</div>
+        </div>
+        <div class="glass-sm rounded-lg p-3 text-center">
+          <div class="text-sm font-bold text-amber-400 font-mono" id="rDuration">—</div>
+          <div class="text-[10px] text-gray-500 font-mono">duration</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Terminal -->
+    <div class="glass rounded-2xl flex-1 flex flex-col min-h-[500px]">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-white/5 shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="flex gap-1.5">
+            <span class="w-3 h-3 rounded-full bg-red-500/60"></span>
+            <span class="w-3 h-3 rounded-full bg-amber-500/60"></span>
+            <span class="w-3 h-3 rounded-full bg-emerald-500/60"></span>
+          </div>
+          <span class="text-xs font-mono text-gray-400">stderr/stdout · zig binary</span>
+        </div>
+        <button onclick="clearTerm()" class="text-[11px] font-mono text-gray-600 hover:text-gray-300 px-2 py-1 rounded hover:bg-white/5 transition-colors">clear</button>
+      </div>
+      <div id="terminal" class="terminal flex-1 overflow-y-auto scroll-thin p-4 text-gray-600">
+        <span>— aguardando execução —</span>
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<script>
+// ── SSE state ────────────────────────────────────────────────────────────
+let evtSource  = null;
+let isRunning  = false;
+let curRule    = null;
+let curScenario = null;
+let scenarioNodes = [];
+let featureCount  = 0;
+let scenarioCount = 0;
+
+// ── Tree builder ─────────────────────────────────────────────────────────
+function kwBadge(keyword) {
+  const cls = {
+    Feature:'kw-feature', Rule:'kw-rule', Scenario:'kw-scenario',
+    Given:'kw-given', When:'kw-when', Then:'kw-then',
+    And:'kw-and', But:'kw-but', '*':'kw-star',
+  }[keyword] || 'kw-and';
+  return `<span class="kw-badge ${cls}">${keyword}</span>`;
+}
+
+function handleGherkinEvent(ev) {
+  const tree = document.getElementById('gherkinTree');
+
+  switch (ev.kind) {
+    case 'feature': {
+      tree.innerHTML = '';
+      featureCount++;
+      const el = document.createElement('div');
+      el.className = 'mb-3 anim-in';
+      el.innerHTML = `<div class="flex items-center gap-1 mb-2">${kwBadge('Feature')}<span class="gh-feature">${esc(ev.text)}</span></div><div class="rules-host ml-2 border-l border-violet-500/20 pl-3"></div>`;
+      tree.appendChild(el);
+      curRule = el.querySelector('.rules-host');
+      curScenario = null;
+      document.getElementById('statFeatures').textContent = featureCount;
+      document.getElementById('treeStatus').textContent = 'running...';
+      break;
+    }
+    case 'rule': {
+      if (!curRule) return;
+      const el = document.createElement('div');
+      el.className = 'mb-2 anim-in';
+      el.innerHTML = `<div class="flex items-center gap-1 mb-1.5">${kwBadge('Rule')}<span class="gh-rule text-[11px]">${esc(ev.text)}</span></div><div class="scenarios-host ml-2 border-l border-cyan-500/15 pl-3"></div>`;
+      curRule.appendChild(el);
+      curRule = el.querySelector('.scenarios-host');
+      curScenario = null;
+      break;
+    }
+    case 'scenario': {
+      const host = curRule || document.getElementById('gherkinTree');
+      scenarioCount++;
+      document.getElementById('statScenarios').textContent = scenarioCount;
+
+      const el = document.createElement('div');
+      el.className = 'mb-2 rounded-lg p-2 anim-in';
+      el.style.cssText = 'background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05)';
+      el.dataset.scenarioText = ev.text;
+      el.innerHTML = `
+        <div class="flex items-start gap-1.5 mb-1">
+          <span class="sc-dot sc-dot-running mt-0.5 shrink-0"></span>
+          ${kwBadge('Scenario')}
+          <span class="gh-scenario text-[11px] leading-tight">${esc(ev.text)}</span>
+          ${ev.rule ? `<span class="ml-auto text-[10px] text-gray-600 font-mono shrink-0">[${esc(ev.rule)}]</span>` : ''}
+        </div>
+        <div class="steps-host ml-6"></div>`;
+      host.appendChild(el);
+      scenarioNodes.push(el);
+      curScenario = el.querySelector('.steps-host');
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      break;
+    }
+    case 'step': {
+      if (!curScenario) return;
+      const kw = ev.keyword;
+      const klass = {Given:'gh-given',When:'gh-when',Then:'gh-then',And:'gh-and',But:'gh-but','*':'gh-star'}[kw] || 'gh-and';
+      const el = document.createElement('div');
+      el.className = `flex gap-1.5 py-0.5 anim-in ${klass}`;
+      el.innerHTML = `${kwBadge(kw)}<span class="text-[10px]">${esc(ev.text)}</span>`;
+      curScenario.appendChild(el);
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      break;
+    }
+  }
+}
+
+function markAllScenarios(passed) {
+  scenarioNodes.forEach(el => {
+    const dot = el.querySelector('.sc-dot');
+    if (dot) {
+      dot.className = 'sc-dot ' + (passed ? 'sc-dot-pass' : 'sc-dot-fail');
+    }
+    el.style.borderColor = passed ? 'rgba(16,185,129,.2)' : 'rgba(244,63,94,.2)';
+  });
+}
+
+function resetTree() {
+  curRule = null;
+  curScenario = null;
+  scenarioNodes = [];
+  featureCount  = 0;
+  scenarioCount = 0;
+  document.getElementById('statFeatures').textContent  = '0';
+  document.getElementById('statScenarios').textContent = '0';
+  document.getElementById('statResult').textContent    = '—';
+  document.getElementById('statResult').className      = 'text-lg font-bold';
+  document.getElementById('treeStatus').textContent    = 'aguardando execução...';
+}
+
+// ── Terminal ──────────────────────────────────────────────────────────────
+function appendTerm(text, kind) {
+  const t = document.getElementById('terminal');
+  if (!t.querySelector('div')) t.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = `tl-${kind || 'log'}`;
+  div.textContent = text;
+  t.appendChild(div);
+  t.scrollTop = t.scrollHeight;
+}
+
+function appendTermGherkin(ev) {
+  const indent = {feature:'',rule:'  ',scenario:'    ',step:'      ',log:'  '}[ev.kind] || '';
+  const kw = ev.kind === 'step' ? ev.keyword + ' ' : (ev.kind + ': ');
+  appendTerm(indent + kw + (ev.text || ''), ev.kind);
+}
+
+function clearTerm() {
+  document.getElementById('terminal').innerHTML = '<span class="text-gray-700">— cleared —</span>';
+}
+
+// ── SSE ───────────────────────────────────────────────────────────────────
+function connectSSE() {
+  if (evtSource) { evtSource.close(); }
+  evtSource = new EventSource('/sse');
+
+  evtSource.addEventListener('connected', e => {
+    setSseDot(true);
+    const d = JSON.parse(e.data);
+    appendTerm(`[SSE] connected${d.active ? ' · running: '+d.active : ''}`, 'start');
+  });
+
+  evtSource.addEventListener('test-start', e => {
+    const d = JSON.parse(e.data);
+    if (d.type !== 'bdd') return;
+    resetTree();
+    setRunning(true);
+    appendTerm(`[START] zig_comptime_bdd_gherkin_keyword.exe`, 'start');
+  });
+
+  evtSource.addEventListener('test-line', e => {
+    const d = JSON.parse(e.data);
+    handleGherkinEvent(d);
+    appendTermGherkin(d);
+  });
+
+  evtSource.addEventListener('test-done', e => {
+    const d = JSON.parse(e.data);
+    if (d.type !== 'bdd') return;
+    setRunning(false);
+    const ok = d.status === 'pass';
+    markAllScenarios(ok);
+
+    // stats bar
+    document.getElementById('statsBar').classList.remove('hidden');
+    document.getElementById('rPassed').textContent   = d.passed;
+    document.getElementById('rFailed').textContent   = d.failed;
+    document.getElementById('rTotal').textContent    = d.total;
+    document.getElementById('rDuration').textContent = d.duration_ms + 'ms';
+
+    const resultEl = document.getElementById('statResult');
+    resultEl.textContent  = ok ? 'PASS' : 'FAIL';
+    resultEl.className    = 'text-lg font-bold ' + (ok ? 'text-emerald-400' : 'text-red-400');
+
+    document.getElementById('treeStatus').textContent = ok
+      ? `✓ ${d.passed}/${d.total} passed · ${d.duration_ms}ms`
+      : `✗ ${d.failed} failed · ${d.duration_ms}ms`;
+    document.getElementById('treeStatus').className = 'text-[11px] font-mono ' + (ok ? 'text-emerald-400' : 'text-red-400');
+
+    appendTerm(`[DONE] exit 0 · ${d.passed} scenarios passed · ${d.duration_ms}ms`, ok ? 'done' : 'error');
+  });
+
+  evtSource.addEventListener('test-error', e => {
+    const d = JSON.parse(e.data);
+    if (d.type !== 'bdd') return;
+    setRunning(false);
+    appendTerm(`[ERROR] ${d.message}`, 'error');
+  });
+
+  evtSource.onerror = () => {
+    setSseDot(false);
+    evtSource.close();
+    setTimeout(connectSSE, 3000);
+  };
+}
+
+function setSseDot(ok) {
+  const dot = document.getElementById('sseDot');
+  const lbl = document.getElementById('sseLabel');
+  dot.className = 'sc-dot ' + (ok ? 'sc-dot-running' : 'sc-dot-idle');
+  lbl.textContent = ok ? 'live' : 'disconnected';
+  lbl.className = 'text-xs font-mono ' + (ok ? 'text-emerald-400' : 'text-gray-500');
+}
+
+function setRunning(on) {
+  isRunning = on;
+  const btn = document.getElementById('btnRun');
+  const lbl = document.getElementById('btnRunLabel');
+  btn.disabled = on;
+  btn.style.opacity = on ? '.5' : '1';
+  lbl.textContent = on ? 'RUNNING...' : 'RUN BDD SUITE';
+}
+
+// ── Run ───────────────────────────────────────────────────────────────────
+async function runBDD() {
+  if (isRunning) return;
+  clearTerm();
+  setRunning(true);
+  try {
+    const r = await fetch('/run/bdd', { method: 'POST' });
+    if (r.status === 501 || r.status === 503) {
+      const d = await r.json();
+      appendTerm(`[ERROR] ${d.error}: ${d.message || d.path || ''}`, 'error');
+      if (d.hint) appendTerm(`[HINT] ${d.hint}`, 'warn');
+      setRunning(false);
+    }
+  } catch (e) {
+    appendTerm(`[ERROR] Cannot reach server — start: node tests/server.js`, 'error');
+    setRunning(false);
+  }
+}
+
+// ── Load last result ───────────────────────────────────────────────────────
+async function loadLastResult() {
+  try {
+    const r = await fetch('/result/bdd');
+    const d = await r.json();
+    if (d.status === 'pass' || d.status === 'fail') {
+      document.getElementById('statsBar').classList.remove('hidden');
+      document.getElementById('rPassed').textContent   = d.passed;
+      document.getElementById('rFailed').textContent   = d.failed;
+      document.getElementById('rTotal').textContent    = d.total;
+      document.getElementById('rDuration').textContent = d.duration_ms + 'ms';
+      const resultEl = document.getElementById('statResult');
+      resultEl.textContent = d.status.toUpperCase();
+      resultEl.className = 'text-lg font-bold ' + (d.status === 'pass' ? 'text-emerald-400' : 'text-red-400');
+    }
+  } catch {}
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  connectSSE();
+  loadLastResult();
+});
+</script>
+</body>
+</html>

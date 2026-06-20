@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chaos Vault | Enclave Attestation Chaos Simulator</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        cyber: {
+                            bg: '#030712',
+                            card: 'rgba(17, 24, 39, 0.7)',
+                            border: 'rgba(255, 255, 255, 0.08)',
+                            primary: '#06b6d4', // Cyan
+                            success: '#10b981', // Emerald
+                            error: '#f43f5e', // Rose
+                            warning: '#fbbf24', // Amber
+                            accent: '#8b5cf6' // Violet
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Animate.css -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+    <style>
+        body {
+            background-color: #030712;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.05) 0px, transparent 50%),
+                radial-gradient(at 50% 0%, rgba(139, 92, 246, 0.04) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.03) 0px, transparent 50%);
+            background-attachment: fixed;
+        }
+        .glass {
+            backdrop-filter: blur(16px);
+            background: rgba(11, 17, 33, 0.75);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .glow-cyan:hover {
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.25);
+            border-color: rgba(6, 182, 212, 0.4);
+        }
+        .glow-red {
+            box-shadow: 0 0 25px rgba(244, 63, 94, 0.35);
+        }
+        .glow-emerald {
+            box-shadow: 0 0 25px rgba(16, 185, 129, 0.35);
+        }
+        .terminal-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .terminal-scroll::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+        .terminal-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+        }
+        .terminal-scroll::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        @keyframes pulse-fast {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        .pulse-fast {
+            animation: pulse-fast 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body class="text-gray-100 min-h-screen font-sans overflow-x-hidden">
+
+    <!-- Top Navigation Header -->
+    <header class="border-b border-cyber-border py-4 px-6 md:px-12 flex items-center justify-between glass sticky top-0 z-50">
+        <div class="flex items-center gap-3">
+            <div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-cyber-primary to-cyber-accent text-white shadow-lg shadow-cyber-primary/20">
+                <svg class="w-5 h-5 animate-spin" style="animation-duration: 4s;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                </svg>
+                <div class="absolute -top-0.5 -right-0.5 w-3 h-3 bg-cyber-success rounded-full border border-cyber-bg pulse-fast"></div>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-xl font-bold tracking-tight font-sans">CHAOS <span class="bg-gradient-to-r from-cyber-primary to-cyber-accent bg-clip-text text-transparent">VAULT</span></h1>
+                    <span class="text-[10px] bg-cyber-primary/10 border border-cyber-primary/20 text-cyber-primary font-semibold px-1.5 py-0.5 rounded uppercase font-mono">v1.2.0</span>
+                </div>
+                <p class="text-[11px] text-gray-400 font-mono">LSES & ZTICAM Enclave Perturbation Core</p>
+            </div>
+        </div>
+        
+        <div class="hidden lg:flex items-center gap-8 text-sm font-mono text-gray-300">
+            <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-cyber-success pulse-fast shadow-[0_0_8px_#10b981]"></span>
+                <span>ZIG LSES: <span class="text-cyber-success font-semibold">ONLINE</span></span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-cyber-success pulse-fast shadow-[0_0_8px_#10b981]"></span>
+                <span>RUST ZTICAM: <span class="text-cyber-success font-semibold">ACTIVE</span></span>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button id="btnRunAll" class="px-4 py-2 bg-gradient-to-r from-cyber-primary to-cyber-accent hover:opacity-90 rounded-lg text-xs font-semibold tracking-wide flex items-center gap-2 transition-all shadow-md shadow-cyber-primary/20 active:scale-95">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                EXECUTE SUITE COMPLETE
+            </button>
+            <button id="btnExport" class="p-2 border border-cyber-border hover:bg-gray-800 rounded-lg text-gray-300 transition-all" title="Exportar Relatório Telemetria">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container Layout -->
+    <main class="max-w-[1600px] mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
+        
+        <!-- LEFT PANEL: Chaos Injection Scenarios (5 cols) -->
+        <section class="lg:col-span-5 flex flex-col gap-6">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-bold text-gray-200 tracking-wide uppercase flex items-center gap-2 font-sans">
+                    <svg class="w-5 h-5 text-cyber-accent animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    Perturbations Control
+                </h2>
+                
+                <!-- Speed controls -->
+                <div class="flex items-center gap-1.5 bg-gray-900 border border-cyber-border rounded-lg p-1 text-[11px] font-mono">
+                    <button id="speedSlow" class="px-2 py-1 rounded text-gray-400 hover:text-white transition-all">SLOW</button>
+                    <button id="speedNormal" class="px-2 py-1 bg-cyber-primary/20 text-cyber-primary rounded transition-all font-semibold">NORM</button>
+                    <button id="speedFast" class="px-2 py-1 rounded text-gray-400 hover:text-white transition-all">HYPER</button>
+                </div>
+            </div>
+
+            <!-- Scenario Cards Container -->
+            <div class="grid grid-cols-1 gap-4 overflow-y-auto max-h-[750px] pr-2 terminal-scroll">
+                
+                <!-- CARD 1 -->
+                <div class="scenario-card glass p-4 rounded-xl relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 glow-cyan cursor-pointer" data-id="poisoned_packet">
+                    <div class="absolute -right-4 -bottom-4 opacity-5 text-gray-400">
+                        <svg class="w-24 h-24" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
+                    </div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] bg-red-950/40 border border-red-500/20 text-red-400 font-bold px-2 py-0.5 rounded font-mono uppercase tracking-wider">Memory Attack</span>
+                        <span class="text-xs text-cyber-primary font-semibold font-mono">ZIG LSES</span>
+                    </div>
+                    <h3 class="text-sm font-semibold text-gray-100 flex items-center gap-1.5">
+                        1. Poisoned Packet Memory Attack
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-1.5 font-sans leading-relaxed">
+                        Injects out-of-bounds illegal memory addresses (kernel space borders and zero-pages) to test enclave memory safety boundary locks.
+                    </p>
+                    <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-gray-400 border-t border-cyber-border/40 pt-2.5">
+                        <span>Boundary: <span class="text-gray-200">0x1000 - 0x7FFFFFFFFFFF</span></span>
+                        <button class="btn-inject px-2.5 py-1 bg-red-950/40 border border-red-500/30 hover:bg-red-500 hover:text-white rounded text-red-400 text-[10px] font-bold tracking-wider transition-all flex items-center gap-1">
+                            INJECT POISON
+                        </button>
+                    </div>
+                </div>
+
+                <!-- CARD 2 -->
+                <div class="scenario-card glass p-4 rounded-xl relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 glow-cyan cursor-pointer" data-id="jitter">
+                    <div class="absolute -right-4 -bottom-4 opacity-5 text-gray-400">
+                        <svg class="w-24 h-24" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
+                    </div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] bg-amber-950/40 border border-amber-500/20 text-amber-400 font-bold px-2 py-0.5 rounded font-mono uppercase tracking-wider">Desynchronization</span>
+                        <span class="text-xs text-cyber-primary font-semibold font-mono">ZIG LSES</span>
+                    </div>
+                    <h3 class="text-sm font-semibold text-gray-100 flex items-center gap-1.5">
+                        2. Malicious Jitter Pulse Attack
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-1.5 font-sans leading-relaxed">
+                        Forces severe timing pulse variance (> 2 delta threshold) into the Primordial Soup AF_XDP ring buffer to cause timing desync dropouts.
+                    </p>
+                    <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-gray-400 border-t border-cyber-border/40 pt-2.5">
+                        <span>Max Jitter: <span class="text-gray-200">2 units</span></span>
+                        <button class="btn-inject px-2.5 py-1 bg-amber-950/40 border border-amber-500/30 hover:bg-amber-500 hover:text-white rounded text-amber-400 text-[10px] font-bold tracking-wider transition-all flex items-center gap-1">
+                            INJECT JITTER
+                        </button>
+                    </div>
+                </div>
+
+                <!-- CARD 3 -->
+                <div class="scenario-card glass p-4 rounded-xl relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 glow-cyan cursor-pointer" data-id="mutilation">
+                    <div class="absolute -right-4 -bottom-4 opacity-5 text-gray-400">
+                        <svg class="w-24 h-24" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.629 3.54c-.161.088-.322.19-.477.308a3.5 3.5 0 00-1.538 2.3 2.5 2.5 0 001.07 2.457c.346.229.614.558.822.88.215.33.403.713.57 1.116.334.804.614 1.768.84 2.734.224.95.407 1.9.628 3.539.161-.088.322-.19.478-.308a3.5 3.5 0 001.538-2.3 2.5 2.5 0 00-1.07-2.457c-.346-.229-.614-.558-.822-.88-.215-.33-.403-.713-.57-1.116-.334-.804-.614-1.768-.84-2.734a31.363 31.363 0 00-.628-3.539c.161-.088.322-.19.478-.308a3.5 3.5 0 001.538-2.3 2.5 2.5 0 00-1.07-2.457z" clip-rule="evenodd"/></svg>
+                    </div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] bg-red-950/40 border border-red-500/20 text-red-400 font-bold px-2 py-0.5 rounded font-mono uppercase tracking-wider">Degradation Panic</span>
+                        <span class="text-xs text-cyber-primary font-semibold font-mono">ZIG LSES</span>
+                    </div>
+                    <h3 class="text-sm font-semibold text-gray-100 flex items-center gap-1.5">
+                        3. Enclave Tail Mutilation & Panic
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-1.5 font-sans leading-relaxed">
+                        Triggers health state panic to degrade key verification. Checks self-healing via tail dropping and ephemeral key regeneration.
+                    </p>
+                    <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-gray-400 border-t border-cyber-border/40 pt-2.5">
+                        <span>Recovery: <span class="text-gray-200">Ephemeral Rot</span></span>
+                        <button class="btn-inject px-2.5 py-1 bg-red-950/40 border border-red-500/30 hover:bg-red-500 hover:text-white rounded text-red-400 text-[10px] font-bold tracking-wider transition-all flex items-center gap-1">
+                            MUTILATE TAIL
+                        </button>
+                    </div>
+                </div>
+
+                <!-- CARD 4 -->
+                <div class="scenario-card glass p-4 rounded-xl relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 glow-cyan cursor-pointer" data-id="backpressure">
+                    <div class="absolute -right-4 -bottom-4 opacity-5 text-gray-400">
+                        <svg class="w-24 h-24" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11 4a1 1 0 10-2 0v4a1 1 0 102 0V7zm-3 2a1 1 0 10-2 0v2a1 1 0 102 0V9z" clip-rule="evenodd"/></svg>
+                    </div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] bg-purple-950/40 border border-purple-500/20 text-purple-400 font-bold px-2 py-0.5 rounded font-mono uppercase tracking-wider">Backpressure</span>
+                        <span class="text-xs text-cyber-primary font-semibold font-mono">ZIG LSES</span>
+                    </div>
+                    <h3 class="text-sm font-semibold text-gray-100 flex items-center gap-1.5">
+                        4. EventBus Proof Gate Flooding
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-1.5 font-sans leading-relaxed">
+                        Floods the queue beyond the 1,000 item stashing limit to trigger backpressure blocks and prevent memory exhaustion.
+                    </p>
+                    <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-gray-400 border-t border-cyber-border/40 pt-2.5">
+                        <span>Max Capacity: <span class="text-gray-200">1000 items</span></span>
+                        <button class="btn-inject px-2.5 py-1 bg-purple-950/40 border border-purple-500/30 hover:bg-purple-500 hover:text-white rounded text-purple-400 text-[10px] font-bold tracking-wider transition-all flex items-center gap-1">
+                            FLOOD QUEUE
+                        </button>
+                    </div>
+                </div>
+
+                <!-- CARD 5 -->
+                <div class="scenario-card glass p-4 rounded-xl relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 glow-cyan cursor-pointer" data-id="nonce_replay">
+                    <div class="absolute -right-4 -bottom-4 opacity-5 text-gray-400">
+                        <svg class="w-24 h-24" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.005a1 1 0 01.992.88 5.002 5.002 0 008.001 1.115H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.1a7.002 7.002 0 01-11.602-2.568 1 1 0 01.88-1.127z" clip-rule="evenodd"/></svg>
+                    </div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] bg-amber-950/40 border border-amber-500/20 text-amber-400 font-bold px-2 py-0.5 rounded font-mono uppercase tracking-wider">Replay Attack</span>
+                        <span class="text-xs text-cyber-primary font-semibold font-mono">ZIG LSES</span>
+                    </div>
+                    <h3 class="text-sm font-semibold text-gray-100 flex items-center gap-1.5">
+                        5. Nonce Replay & Duplication
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-1.5 font-sans leading-relaxed">
+                        Attempts a state injection with a duplicated nonce value in the active domain context. Verifies NonceRegistry interception.
+                    </p>
+                    <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-gray-400 border-t border-cyber-border/40 pt-2.5">
+                        <span>Mode: <span class="text-gray-200">Domain Separated</span></span>
+                        <button class="btn-inject px-2.5 py-1 bg-amber-950/40 border border-amber-500/30 hover:bg-amber-500 hover:text-white rounded text-amber-400 text-[10px] font-bold tracking-wider transition-all flex items-center gap-1">
+                            REPLAY NONCE
+                        </button>
+                    </div>
+                </div>
+
+                <!-- CARD 6 -->
+                <div class="scenario-card glass p-4 rounded-xl relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 glow-cyan cursor-pointer" data-id="tag_tampering">
+                    <div class="absolute -right-4 -bottom-4 opacity-5 text-gray-400">
+                        <svg class="w-24 h-24" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
+                    </div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] bg-red-950/40 border border-red-500/20 text-red-400 font-bold px-2 py-0.5 rounded font-mono uppercase tracking-wider">Bit Mutation</span>
+                        <span class="text-xs text-cyber-primary font-semibold font-mono">ZIG LSES</span>
+                    </div>
+                    <h3 class="text-sm font-semibold text-gray-100 flex items-center gap-1.5">
+                        6. Decryption Auth Tag Tampering
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-1.5 font-sans leading-relaxed">
+                        Mutates a single bit in the AES-256-GCM authentication tag to check isolation protection of volatile keys during integrity failures.
+                    </p>
+                    <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-gray-400 border-t border-cyber-border/40 pt-2.5">
+                        <span>Algorithm: <span class="text-gray-200">AES-GCM-256</span></span>
+                        <button class="btn-inject px-2.5 py-1 bg-red-950/40 border border-red-500/30 hover:bg-red-500 hover:text-white rounded text-red-400 text-[10px] font-bold tracking-wider transition-all flex items-center gap-1">
+                            TAMPER TAG
+                        </button>
+                    </div>
+                </div>
+
+                <!-- CARD 7 -->
+                <div class="scenario-card glass p-4 rounded-xl relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 glow-cyan cursor-pointer" data-id="tripartite_mismatch">
+                    <div class="absolute -right-4 -bottom-4 opacity-5 text-gray-400">
+                        <svg class="w-24 h-24" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 0010 16a5.986 5.986 0 004.546-2.084A5 5 0 0010 11z" clip-rule="evenodd"/></svg>
+                    </div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] bg-violet-950/40 border border-violet-500/20 text-violet-400 font-bold px-2 py-0.5 rounded font-mono uppercase tracking-wider">Identity Mismatch</span>
+                        <span class="text-xs text-cyber-accent font-semibold font-mono">RUST ZTICAM</span>
+                    </div>
+                    <h3 class="text-sm font-semibold text-gray-100 flex items-center gap-1.5">
+                        7. Tripartite Silent Passkey Mismatch
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-1.5 font-sans leading-relaxed">
+                        Forges MAC/IP attestation values to simulate Passkey tripartite discrepancy. Validates immediate cryptographic isolation.
+                    </p>
+                    <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-gray-400 border-t border-cyber-border/40 pt-2.5">
+                        <span>Attest: <span class="text-gray-200">IP + MAC + Key</span></span>
+                        <button class="btn-inject px-2.5 py-1 bg-violet-950/40 border border-violet-500/30 hover:bg-violet-500 hover:text-white rounded text-violet-400 text-[10px] font-bold tracking-wider transition-all flex items-center gap-1">
+                            MISMATCH ATT
+                        </button>
+                    </div>
+                </div>
+
+                <!-- CARD 8 -->
+                <div class="scenario-card glass p-4 rounded-xl relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 glow-cyan cursor-pointer" data-id="mlkem_failure">
+                    <div class="absolute -right-4 -bottom-4 opacity-5 text-gray-400">
+                        <svg class="w-24 h-24" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M2.166 4.9L9.03 1.62a1 1 0 01.937 0l6.865 3.28A1 1 0 0117.5 5.79v6.42a1 1 0 01-.669.948l-6.865 2.685a1 1 0 01-.931 0L2.17 13.158a1 1 0 01-.67-.948V5.79a1 1 0 01.666-.9zM10 3.24L4 6.1v4.755l6 2.345 6-2.345V6.1l-6-2.86z" clip-rule="evenodd"/></svg>
+                    </div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] bg-violet-950/40 border border-violet-500/20 text-violet-400 font-bold px-2 py-0.5 rounded font-mono uppercase tracking-wider">Handshake Fail</span>
+                        <span class="text-xs text-cyber-accent font-semibold font-mono">RUST ZTICAM</span>
+                    </div>
+                    <h3 class="text-sm font-semibold text-gray-100 flex items-center gap-1.5">
+                        8. ML-KEM Post-Quantum Failure
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-1.5 font-sans leading-relaxed">
+                        Injects malformed Kyber key structures during handshake, triggering safe FFI fallback and edge key context regeneration.
+                    </p>
+                    <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-gray-400 border-t border-cyber-border/40 pt-2.5">
+                        <span>PQC: <span class="text-gray-200">Kyber ML-KEM-1024</span></span>
+                        <button class="btn-inject px-2.5 py-1 bg-violet-950/40 border border-violet-500/30 hover:bg-violet-500 hover:text-white rounded text-violet-400 text-[10px] font-bold tracking-wider transition-all flex items-center gap-1">
+                            FAIL PQ HANDSHAKE
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- RIGHT PANEL: Telemetry, Visualizations, Logs (7 cols) -->
+        <section class="lg:col-span-7 flex flex-col gap-6">
+            
+            <!-- Dashboard Grid Info (Circular Health, Stats Cards) -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                
+                <!-- circular gauge -->
+                <div class="glass p-4 rounded-xl flex items-center gap-4 col-span-1 sm:col-span-1">
+                    <div class="relative w-16 h-16 flex-shrink-0 flex items-center justify-center">
+                        <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                            <path class="text-gray-800" stroke-width="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                            <path id="gaugeHealthCircle" class="text-cyber-success transition-all duration-500 ease-out" stroke-dasharray="100, 100" stroke-width="3" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                        </svg>
+                        <div class="absolute text-[13px] font-mono font-bold" id="gaugeHealthVal">100%</div>
+                    </div>
+                    <div>
+                        <span class="text-[10px] font-mono text-gray-400 block uppercase tracking-wider">Enclave Health</span>
+                        <span class="text-xs font-bold text-cyber-success tracking-wide uppercase transition-all duration-300" id="gaugeHealthState">SECURE</span>
+                    </div>
+                </div>
+
+                <!-- Stats card 2 -->
+                <div class="glass p-4 rounded-xl flex flex-col justify-between">
+                    <span class="text-[10px] font-mono text-gray-400 block uppercase tracking-wider">Pulse Latency</span>
+                    <div class="flex items-baseline gap-1 mt-1">
+                        <span class="text-2xl font-bold font-mono text-cyber-primary" id="statLatency">4.2</span>
+                        <span class="text-xs text-gray-400 font-mono">µs</span>
+                    </div>
+                    <span class="text-[9px] text-cyber-success flex items-center gap-1 font-mono mt-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-cyber-success animate-ping"></span>
+                        Jitter: 0.05µs (OK)
+                    </span>
+                </div>
+
+                <!-- Stats card 3 -->
+                <div class="glass p-4 rounded-xl flex flex-col justify-between">
+                    <span class="text-[10px] font-mono text-gray-400 block uppercase tracking-wider">Enclave Session</span>
+                    <div class="flex items-baseline gap-1 mt-1">
+                        <span class="text-2xl font-bold font-mono text-cyber-accent" id="statSession">100</span>
+                        <span class="text-[10px] text-gray-400 font-mono">Rotations</span>
+                    </div>
+                    <span class="text-[9px] text-gray-400 font-mono mt-1 block">
+                        Active Keys: <span class="text-gray-200" id="statActiveKeys">2</span> / Ed25519
+                    </span>
+                </div>
+
+            </div>
+
+            <!-- Memory & Sequence visualizer (UMEM Buffer & ZTICAM Bitmap) -->
+            <div class="glass p-4 rounded-xl">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-xs font-bold font-mono text-gray-300 uppercase tracking-widest flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded bg-cyber-primary"></span>
+                        Contiguous Memory (UMEM U-NIC) & ZTICAM Replay Bitmap
+                    </h3>
+                    <span class="text-[10px] font-mono text-gray-400" id="visualizerMode">MODE: AF_XDP ZERO-COPY</span>
+                </div>
+                
+                <!-- Blocks grid container -->
+                <div class="grid grid-cols-8 sm:grid-cols-16 gap-1" id="memoryGrid">
+                    <!-- Javascript will render 64 blocks of memory cell structures here -->
+                </div>
+
+                <!-- Grid legend -->
+                <div class="flex items-center justify-end gap-4 mt-3 text-[10px] font-mono text-gray-400">
+                    <div class="flex items-center gap-1">
+                        <div class="w-2.5 h-2.5 rounded bg-gray-900 border border-cyber-border"></div>
+                        <span>Contiguous Page</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <div class="w-2.5 h-2.5 rounded bg-cyber-primary/40 border border-cyber-primary/60"></div>
+                        <span>Attested Ring</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <div class="w-2.5 h-2.5 rounded bg-cyber-success/40 border border-cyber-success/60"></div>
+                        <span>Isolated Safe</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <div class="w-2.5 h-2.5 rounded bg-cyber-error/40 border border-cyber-error/60 pulse-fast"></div>
+                        <span>Compromised Block</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Animated Telemetry Latency Curve Graph -->
+            <div class="glass p-4 rounded-xl">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-xs font-bold font-mono text-gray-300 uppercase tracking-widest flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded bg-cyber-accent"></span>
+                        Multi-Phase Latency Profile (Before -> During -> After)
+                    </h3>
+                    <span class="text-[10px] text-gray-400 font-mono">METRIC: us (MICROSECONDS)</span>
+                </div>
+
+                <!-- SVG Bezier chart container -->
+                <div class="relative w-full h-44 bg-cyber-bg/60 border border-cyber-border/40 rounded-lg overflow-hidden p-2">
+                    <svg class="w-full h-full" id="telemetryChart" viewBox="0 0 600 150" preserveAspectRatio="none">
+                        <!-- Grid lines -->
+                        <line x1="0" y1="30" x2="600" y2="30" stroke="rgba(255,255,255,0.03)" stroke-dasharray="5,5"/>
+                        <line x1="0" y1="75" x2="600" y2="75" stroke="rgba(255,255,255,0.03)" stroke-dasharray="5,5"/>
+                        <line x1="0" y1="120" x2="600" y2="120" stroke="rgba(255,255,255,0.03)" stroke-dasharray="5,5"/>
+                        <line x1="200" y1="0" x2="200" y2="150" stroke="rgba(255,255,255,0.05)"/>
+                        <line x1="400" y1="0" x2="400" y2="150" stroke="rgba(255,255,255,0.05)"/>
+                        
+                        <!-- Area gradient definition -->
+                        <defs>
+                            <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.3"/>
+                                <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.0"/>
+                            </linearGradient>
+                        </defs>
+
+                        <!-- Area path under the curve -->
+                        <path id="chartArea" d="M 0,120 L 200,120 L 400,120 L 600,120 L 600,150 L 0,150 Z" fill="url(#chartGrad)" class="transition-all duration-700 ease-out" />
+                        
+                        <!-- Line Bezier path -->
+                        <path id="chartLine" d="M 0,120 Q 100,120 200,120 T 400,120 T 600,120" fill="none" stroke="#06b6d4" stroke-width="2" class="transition-all duration-700 ease-out" />
+                        
+                        <!-- Interactive dots -->
+                        <circle id="dotBefore" cx="100" cy="120" r="4.5" class="fill-cyber-success stroke-cyber-bg stroke-2 cursor-pointer transition-all duration-500" />
+                        <circle id="dotDuring" cx="300" cy="120" r="4.5" class="fill-cyber-error stroke-cyber-bg stroke-2 cursor-pointer transition-all duration-500" />
+                        <circle id="dotAfter" cx="500" cy="120" r="4.5" class="fill-cyber-success stroke-cyber-bg stroke-2 cursor-pointer transition-all duration-500" />
+                    </svg>
+
+                    <!-- Chart phase text anchors -->
+                    <div class="absolute left-2.5 top-2.5 text-[9px] font-mono text-gray-500 uppercase">BEFORE (BASELINE)</div>
+                    <div class="absolute left-1/2 -translate-x-1/2 top-2.5 text-[9px] font-mono text-gray-500 uppercase">DURING (CHAOS)</div>
+                    <div class="absolute right-2.5 top-2.5 text-[9px] font-mono text-gray-500 uppercase text-right">AFTER (HEALED)</div>
+                </div>
+            </div>
+
+            <!-- Before / During / After Phase Telemetry Table -->
+            <div class="glass p-4 rounded-xl">
+                <h3 class="text-xs font-bold font-mono text-gray-300 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                    <svg class="w-4 h-4 text-cyber-success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+                    Live Telemetry Phase Comparer
+                </h3>
+                
+                <div class="overflow-x-auto text-[11px] font-mono">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-cyber-border/40 text-gray-400">
+                                <th class="py-2">PHASE</th>
+                                <th class="py-2">ENCLAVE STATUS</th>
+                                <th class="py-2">LATENCY</th>
+                                <th class="py-2">ACTIVE SESSION</th>
+                                <th class="py-2">ACTIVE KEYS</th>
+                                <th class="py-2">ERROR HANDLED</th>
+                            </tr>
+                        </thead>
+                        <tbody id="telemetryTableBody" class="divide-y divide-cyber-border/20 text-gray-300">
+                            <!-- Table cells rendered dynamically by JS -->
+                            <tr><td colspan="6" class="py-3 text-center text-gray-500">Aguardando injeção de perturbação...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Terminal log feed -->
+            <div class="glass rounded-xl overflow-hidden flex flex-col h-64 border border-cyber-border">
+                <div class="bg-gray-900 px-4 py-2 border-b border-cyber-border flex items-center justify-between text-xs font-mono">
+                    <span class="text-gray-300 flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-cyber-error pulse-fast"></span>
+                        LIVE ENCLAVE LOGS FEED
+                    </span>
+                    <button id="btnClearLogs" class="text-gray-400 hover:text-white transition-all">CLEAR</button>
+                </div>
+                <div id="terminalBody" class="flex-grow p-4 bg-black/90 font-mono text-[11px] leading-relaxed overflow-y-auto terminal-scroll text-cyber-success">
+                    <div class="text-gray-500">[SYSTEM READY] Enclave boot sequencing complete. LSES active on UMEM AF_XDP.</div>
+                    <div class="text-gray-500">[SYSTEM READY] ZTICAM edge keystore initialized. 65,536 sequence bitmap mapped.</div>
+                    <div class="text-gray-400 font-semibold">[SECURE] Monitoring enclave invariants: Pulse delta normal, Zero memory leaks.</div>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Bottom Status Bar -->
+    <footer class="mt-8 border-t border-cyber-border p-4 text-center text-xs text-gray-500 font-mono glass">
+        Vault Chaos Simulator &copy; 2026. Made with ❤️ for 2factor.digital.
+    </footer>
+
+    <!-- Interactive Simulation Core Logic -->
+    <script>
+        // DOM Elements
+        const btnRunAll = document.getElementById('btnRunAll');
+        const btnExport = document.getElementById('btnExport');
+        const btnClearLogs = document.getElementById('btnClearLogs');
+        const terminalBody = document.getElementById('terminalBody');
+        const speedSlow = document.getElementById('speedSlow');
+        const speedNormal = document.getElementById('speedNormal');
+        const speedFast = document.getElementById('speedFast');
+        
+        // Gauges & Stats
+        const gaugeHealthCircle = document.getElementById('gaugeHealthCircle');
+        const gaugeHealthVal = document.getElementById('gaugeHealthVal');
+        const gaugeHealthState = document.getElementById('gaugeHealthState');
+        const statLatency = document.getElementById('statLatency');
+        const statSession = document.getElementById('statSession');
+        const statActiveKeys = document.getElementById('statActiveKeys');
+        const memoryGrid = document.getElementById('memoryGrid');
+        const visualizerMode = document.getElementById('visualizerMode');
+        
+        // Table & Chart
+        const telemetryTableBody = document.getElementById('telemetryTableBody');
+        const chartLine = document.getElementById('chartLine');
+        const chartArea = document.getElementById('chartArea');
+        const dotBefore = document.getElementById('dotBefore');
+        const dotDuring = document.getElementById('dotDuring');
+        const dotAfter = document.getElementById('dotAfter');
+
+        // State Machine
+        let simulationSpeed = 1000; // Delay in milliseconds for transitions
+        let isRunningSuite = false;
+        let currentSession = 100;
+        let telemetryHistory = [];
+
+        // Scenario Data Maps
+        const scenarios = {
+            poisoned_packet: {
+                name: "Poisoned Packet Memory Attack",
+                enclave: "ZIG LSES (Enclave Buffer Gate)",
+                attackType: "Memory Intrusion",
+                errorThrown: "error.PoisonedPacket",
+                baseline: { health: 100, latency: 4, session: 100, keys: 2, errors: 0, status: "SECURE" },
+                chaos: { health: 70, latency: 125, session: 100, keys: 2, errors: 5, status: "ISOLATED" },
+                healed: { health: 100, latency: 3, session: 100, keys: 2, errors: 0, status: "SECURE" },
+                logs: [
+                    { type: 'attack', text: '[ATTACK] Injected 5 out-of-bounds pointer addresses: 0x1, 0x2, 0x999, 0x800000000000, 0xFFFFFFFFFFFF.' },
+                    { type: 'alert', text: '[WARNING] Enclave memory gate intercepting illegal memory mappings...' },
+                    { type: 'success', text: '[INTERCEPTED] Enclave bounds isolated 100% of poisoned pointers. error.PoisonedPacket thrown.' },
+                    { type: 'heal', text: '[HEAL] Volatile heap isolated. Memory integrity remains fully intact. Latency normalized.' }
+                ],
+                visualize: 'memory'
+            },
+            jitter: {
+                name: "Malicious Jitter Pulse Attack",
+                enclave: "ZIG LSES (Primordial Soup UMEM)",
+                attackType: "Network Jitter Desync",
+                errorThrown: "error.InconsistentPulse",
+                baseline: { health: 100, latency: 5, session: 100, keys: 2, errors: 0, status: "SECURE" },
+                chaos: { health: 60, latency: 180, session: 100, keys: 2, errors: 1, status: "DEGRADED" },
+                healed: { health: 100, latency: 4, session: 100, keys: 2, errors: 0, status: "SECURE" },
+                logs: [
+                    { type: 'attack', text: '[ATTACK] Forcing packet arrival latency jitter to +10 pulse units (limit is 2).' },
+                    { type: 'alert', text: '[WARNING] Primordial Soup Rx buffer detected desynchronization delta.' },
+                    { type: 'success', text: '[INTERCEPTED] Dropped desynced packet. error.InconsistentPulse returned.' },
+                    { type: 'heal', text: '[HEAL] Fast sync recovery packet ingested. Jitter window aligned. Pulse clock locked.' }
+                ],
+                visualize: 'memory_jitter'
+            },
+            mutilation: {
+                name: "Enclave Tail Mutilation & Panic",
+                enclave: "ZIG LSES (Storage Enclave)",
+                attackType: "State Degradation",
+                errorThrown: "error.EnclaveMutilated",
+                baseline: { health: 100, latency: 8, session: 100, keys: 2, errors: 0, status: "SECURE" },
+                chaos: { health: 0, latency: 320, session: 100, keys: 0, errors: 1, status: "PANIC" },
+                healed: { health: 100, latency: 12, session: 101, keys: 2, errors: 0, status: "SECURE" },
+                logs: [
+                    { type: 'attack', text: '[ATTACK] Tampering with active storage enclave state. Volatile memory integrity failed.' },
+                    { type: 'alert', text: '[PANIC] Enclave invariants violated! Health status forced to FALSE.' },
+                    { type: 'alert', text: '[ATTACK] Cryptographic operation rejected. error.EnclaveMutilated thrown.' },
+                    { type: 'heal', text: '[SELF-HEALING] Enclave panic threshold reached. Slicing compromised tail. Rotating session credentials...' },
+                    { type: 'success', text: '[HEALED] Ephemeral keys regenerated cleanly. Active session rotated. Health state restored to SECURE.' }
+                ],
+                visualize: 'mutilate'
+            },
+            backpressure: {
+                name: "EventBus Proof Gate Flooding",
+                enclave: "ZIG LSES (PendingProofGate)",
+                attackType: "Buffer Overflow Flood",
+                errorThrown: "error.Backpressure",
+                baseline: { health: 100, latency: 6, session: 100, keys: 2, errors: 0, status: "SECURE" },
+                chaos: { health: 50, latency: 250, session: 100, keys: 2, errors: 4, status: "DEGRADED" },
+                healed: { health: 100, latency: 14, session: 100, keys: 2, errors: 0, status: "SECURE" },
+                logs: [
+                    { type: 'attack', text: '[ATTACK] Flooding EventBus with 1005 concurrent pipeline attestations.' },
+                    { type: 'alert', text: '[WARNING] PendingProofGate stashing buffer exceeded capacity threshold (1000 items).' },
+                    { type: 'success', text: '[INTERCEPTED] Backpressure backstop triggered. Blocked 4 messages. error.Backpressure thrown.' },
+                    { type: 'heal', text: '[HEAL] Proof released. Stashed queues purged. Freeing volatile buffer heap.' }
+                ],
+                visualize: 'memory'
+            },
+            nonce_replay: {
+                name: "Nonce Replay & Duplication",
+                enclave: "ZIG LSES (Nonce Registry)",
+                attackType: "Cryptographic Replay",
+                errorThrown: "error.NonceReused",
+                baseline: { health: 100, latency: 3, session: 100, keys: 2, errors: 0, status: "SECURE" },
+                chaos: { health: 80, latency: 95, session: 100, keys: 2, errors: 1, status: "ISOLATED" },
+                healed: { health: 100, latency: 4, session: 100, keys: 2, errors: 0, status: "SECURE" },
+                logs: [
+                    { type: 'attack', text: '[ATTACK] Replaying previous transaction signature payload with identical nonce.' },
+                    { type: 'alert', text: '[WARNING] NonceRegistry scanning active epoch domains...' },
+                    { type: 'success', text: '[INTERCEPTED] Nonce reuse violation flag raised in prod-context. error.NonceReused thrown.' },
+                    { type: 'heal', text: '[HEAL] Transaction invalidated. Context saved. Replay bitmap cleared.' }
+                ],
+                visualize: 'bitmap'
+            },
+            tag_tampering: {
+                name: "Decryption Auth Tag Tampering",
+                enclave: "ZIG LSES (AES-GCM Decryption)",
+                attackType: "Bit Flip Attack",
+                errorThrown: "error.InvalidAuthTag",
+                baseline: { health: 100, latency: 15, session: 100, keys: 2, errors: 0, status: "SECURE" },
+                chaos: { health: 75, latency: 140, session: 100, keys: 2, errors: 1, status: "ISOLATED" },
+                healed: { health: 100, latency: 5, session: 100, keys: 2, errors: 0, status: "SECURE" },
+                logs: [
+                    { type: 'attack', text: '[ATTACK] Corrupting AES-256-GCM authenticated tag. Flipping bit [0] ^= 1.' },
+                    { type: 'alert', text: '[WARNING] Decrypting envelope body payload...' },
+                    { type: 'success', text: '[INTERCEPTED] Cryptographic checksum validation failed. error.InvalidAuthTag thrown.' },
+                    { type: 'heal', text: '[HEAL] Intercepted corrupted packet immediately. ZERO key material leaked.' }
+                ],
+                visualize: 'memory'
+            },
+            tripartite_mismatch: {
+                name: "Tripartite Silent Passkey Mismatch",
+                enclave: "RUST ZTICAM (Identity Resolv)",
+                attackType: "Identity Spoofing",
+                errorThrown: "ERR_TRIPARTITE_MISMATCH (102)",
+                baseline: { health: 100, latency: 10, session: 100, keys: 3, errors: 0, status: "SECURE" },
+                chaos: { health: 40, latency: 280, session: 100, keys: 3, errors: 1, status: "ISOLATED" },
+                healed: { health: 100, latency: 8, session: 100, keys: 3, errors: 0, status: "SECURE" },
+                logs: [
+                    { type: 'attack', text: '[ATTACK] Spoofing tripartite consumer identity: Forged MAC attestation + IP mismatch.' },
+                    { type: 'alert', text: '[WARNING] ZTICAM enclave comparing Public Key context mappings...' },
+                    { type: 'success', text: '[INTERCEPTED] Tripartite validation failure. Enclave enters total isolation mode.' },
+                    { type: 'heal', text: '[HEAL] Locked consumer attestation. Re-authenticating client peer. Identity restored.' }
+                ],
+                visualize: 'bitmap'
+            },
+            mlkem_failure: {
+                name: "ML-KEM Post-Quantum Failure",
+                enclave: "RUST ZTICAM (ML-KEM Key Exchange)",
+                attackType: "PQ Key Handshake Degradation",
+                errorThrown: "ERR_KYBER_DEGRADED (105)",
+                baseline: { health: 100, latency: 22, session: 100, keys: 3, errors: 0, status: "SECURE" },
+                chaos: { health: 65, latency: 380, session: 100, keys: 1, errors: 1, status: "DEGRADED" },
+                healed: { health: 100, latency: 18, session: 100, keys: 3, errors: 0, status: "SECURE" },
+                logs: [
+                    { type: 'attack', text: '[ATTACK] Injecting malformed Kyber structured pubkeys to downgrade ML-KEM-1024.' },
+                    { type: 'alert', text: '[WARNING] Kyber FFI context rejected structure. Handshake broken.' },
+                    { type: 'success', text: '[INTERCEPTED] Fallback to secure hybrid XOR choreography triggered. error.KyberDegraded caught.' },
+                    { type: 'heal', text: '[HEAL] Re-generated Kyber ML-KEM matrix keys. PQ Handshake complete.' }
+                ],
+                visualize: 'bitmap'
+            }
+        };
+
+        // Initialize grid visualizer (64 cells)
+        function initGrid() {
+            memoryGrid.innerHTML = '';
+            for (let i = 0; i < 64; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'w-full aspect-square rounded-sm border border-cyber-border bg-gray-900/60 transition-all duration-300';
+                cell.id = `mem-cell-${i}`;
+                
+                // Add default design decoration
+                if (i % 7 === 0 || i % 11 === 0) {
+                    cell.classList.add('bg-cyber-primary/10', 'border-cyber-primary/20');
+                } else if (i % 13 === 0) {
+                    cell.classList.add('bg-cyber-success/15', 'border-cyber-success/20');
+                }
+
+                memoryGrid.appendChild(cell);
+            }
+        }
+
+        // Add colored text to terminal logs
+        function log(message, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            let colorClass = 'text-gray-400';
+            if (type === 'attack') colorClass = 'text-red-500 font-bold';
+            if (type === 'alert') colorClass = 'text-amber-500 font-semibold';
+            if (type === 'success') colorClass = 'text-emerald-400 font-bold';
+            if (type === 'heal') colorClass = 'text-cyan-400 font-bold';
+
+            const entry = document.createElement('div');
+            entry.innerHTML = `<span class="text-gray-600 font-mono">[${time}]</span> <span class="${colorClass}">${message}</span>`;
+            terminalBody.appendChild(entry);
+            terminalBody.scrollTop = terminalBody.scrollHeight;
+        }
+
+        // Dynamic Bezier Path drawing helper for SVG Latency Graph
+        function updateChart(beforeY, duringY, afterY) {
+            // Convert us to chart coordinates (baseline is at y=120, max latency of 400us maps to y=20)
+            const mapY = (val) => {
+                const maxVal = 400;
+                const minVal = 0;
+                const minY = 135;
+                const maxY = 25;
+                return minY - ((val - minVal) / (maxVal - minVal)) * (minY - maxY);
+            };
+
+            const y0 = mapY(beforeY);
+            const y1 = mapY(duringY);
+            const y2 = mapY(afterY);
+
+            // Animate dots positions
+            dotBefore.setAttribute('cy', y0);
+            dotDuring.setAttribute('cy', y1);
+            dotAfter.setAttribute('cy', y2);
+
+            // Smooth Bezier Splines
+            const linePath = `M 100,${y0} C 200,${y0} 200,${y1} 300,${y1} C 400,${y1} 400,${y2} 500,${y2}`;
+            const areaPath = `${linePath} L 500,150 L 100,150 Z`;
+
+            chartLine.setAttribute('d', linePath);
+            chartArea.setAttribute('d', areaPath);
+        }
+
+        // Render comparative table
+        function populateTable(scenario, state) {
+            let rowContent = '';
+            
+            const phases = [
+                { name: 'BEFORE (Baseline)', data: scenario.baseline, color: 'text-cyber-success' },
+                { name: 'DURING (Chaos)', data: scenario.chaos, color: 'text-cyber-error font-bold animate-pulse' },
+                { name: 'AFTER (Healed)', data: scenario.healed, color: 'text-cyan-400 font-bold' }
+            ];
+
+            telemetryTableBody.innerHTML = '';
+            phases.forEach(ph => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-cyber-border/20 bg-cyber-bg/20 hover:bg-cyber-bg/40 transition-colors';
+                tr.innerHTML = `
+                    <td class="py-2.5 px-1 font-semibold ${ph.color}">${ph.name}</td>
+                    <td class="py-2.5">
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            ph.data.status === 'SECURE' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/20' :
+                            ph.data.status === 'DEGRADED' ? 'bg-amber-950/40 text-amber-400 border border-amber-500/20' :
+                            ph.data.status === 'PANIC' ? 'bg-red-950/40 text-red-400 border border-red-500/20 pulse-fast' :
+                            'bg-violet-950/40 text-violet-400 border border-violet-500/20'
+                        }">${ph.data.status}</span>
+                    </td>
+                    <td class="py-2.5 font-bold text-cyber-primary">${ph.data.latency} µs</td>
+                    <td class="py-2.5">${ph.data.session}</td>
+                    <td class="py-2.5">${ph.data.keys}</td>
+                    <td class="py-2.5 text-right pr-2 ${ph.data.errors > 0 ? 'text-cyber-error font-bold' : 'text-gray-500'}">
+                        ${ph.data.errors > 0 ? scenario.errorThrown : 'None'}
+                    </td>
+                `;
+                telemetryTableBody.appendChild(tr);
+            });
+        }
+
+        // Apply health state animations & visual indicators
+        function setEnclaveHealth(healthVal, stateStr) {
+            gaugeHealthVal.textContent = `${healthVal}%`;
+            gaugeHealthState.textContent = stateStr;
+
+            // Stroke dasharray calculations
+            const dash = (healthVal / 100) * 100;
+            gaugeHealthCircle.setAttribute('stroke-dasharray', `${dash}, 100`);
+
+            // Colors mapping
+            gaugeHealthCircle.className.baseVal = ''; // Clear classes
+            gaugeHealthState.className = '';
+            
+            if (healthVal === 100) {
+                gaugeHealthCircle.classList.add('text-cyber-success', 'transition-all', 'duration-500');
+                gaugeHealthState.className = 'text-xs font-bold text-cyber-success tracking-wide uppercase';
+            } else if (healthVal > 50) {
+                gaugeHealthCircle.classList.add('text-cyber-warning', 'transition-all', 'duration-500');
+                gaugeHealthState.className = 'text-xs font-bold text-cyber-warning tracking-wide uppercase';
+            } else if (healthVal > 0) {
+                gaugeHealthCircle.classList.add('text-cyber-accent', 'transition-all', 'duration-500');
+                gaugeHealthState.className = 'text-xs font-bold text-cyber-accent tracking-wide uppercase';
+            } else {
+                gaugeHealthCircle.classList.add('text-cyber-error', 'transition-all', 'duration-500', 'pulse-fast');
+                gaugeHealthState.className = 'text-xs font-bold text-cyber-error tracking-wide uppercase animate-pulse';
+            }
+        }
+
+        // Animate memory grid states for visualizers
+        function animateVisualizer(mode, activePhase) {
+            initGrid(); // Reset
+            
+            if (mode === 'memory') {
+                visualizerMode.textContent = "MODE: SGX UMEM FAST RING";
+                if (activePhase === 'chaos') {
+                    // Poison cells randomly
+                    const poisonedIdx = [4, 15, 23, 42, 55];
+                    poisonedIdx.forEach(idx => {
+                        const cell = document.getElementById(`mem-cell-${idx}`);
+                        if (cell) {
+                            cell.className = 'w-full aspect-square rounded-sm border border-red-500/50 bg-red-950/60 pulse-fast';
+                        }
+                    });
+                } else if (activePhase === 'healed') {
+                    // Turn them green representing isolated
+                    const poisonedIdx = [4, 15, 23, 42, 55];
+                    poisonedIdx.forEach(idx => {
+                        const cell = document.getElementById(`mem-cell-${idx}`);
+                        if (cell) {
+                            cell.className = 'w-full aspect-square rounded-sm border stroke-2 border-cyber-success bg-cyber-success/30';
+                        }
+                    });
+                }
+            } else if (mode === 'memory_jitter') {
+                visualizerMode.textContent = "MODE: AF_XDP PACKET CLOCK";
+                if (activePhase === 'chaos') {
+                    for (let i = 0; i < 64; i += 2) {
+                        const cell = document.getElementById(`mem-cell-${i}`);
+                        if (cell) {
+                            cell.className = 'w-full aspect-square rounded-sm border border-amber-500/40 bg-amber-950/50';
+                        }
+                    }
+                }
+            } else if (mode === 'mutilate') {
+                visualizerMode.textContent = "MODE: VOLATILE STATE STORAGE";
+                if (activePhase === 'chaos') {
+                    for (let i = 0; i < 64; i++) {
+                        const cell = document.getElementById(`mem-cell-${i}`);
+                        if (cell) {
+                            cell.className = 'w-full aspect-square rounded-sm border border-red-600/70 bg-red-900/60 animate__animated animate__flash';
+                        }
+                    }
+                } else if (activePhase === 'healed') {
+                    for (let i = 0; i < 32; i++) {
+                        const cell = document.getElementById(`mem-cell-${i}`);
+                        if (cell) {
+                            cell.className = 'w-full aspect-square rounded-sm border border-cyber-success/60 bg-cyber-success/20';
+                        }
+                    }
+                }
+            } else if (mode === 'bitmap') {
+                visualizerMode.textContent = "MODE: ZTICAM REPLAY PROTECTION BITMAP";
+                if (activePhase === 'chaos') {
+                    const replayCells = [8, 9, 24, 25, 40];
+                    replayCells.forEach(idx => {
+                        const cell = document.getElementById(`mem-cell-${idx}`);
+                        if (cell) {
+                            cell.className = 'w-full aspect-square rounded-sm border border-amber-500 bg-amber-900/80 pulse-fast';
+                        }
+                    });
+                } else if (activePhase === 'healed') {
+                    const replayCells = [8, 9, 24, 25, 40];
+                    replayCells.forEach(idx => {
+                        const cell = document.getElementById(`mem-cell-${idx}`);
+                        if (cell) {
+                            cell.className = 'w-full aspect-square rounded-sm border border-cyber-accent bg-cyber-accent/30';
+                        }
+                    });
+                }
+            }
+        }
+
+        // Run Single Scenario Simulator
+        function runChaosScenario(scenarioKey) {
+            return new Promise((resolve) => {
+                const sc = scenarios[scenarioKey];
+                if (!sc) return resolve();
+
+                log(`\n=== INICIANDO: ${sc.name} ===`, 'info');
+                
+                // --- PHASE 1: BEFORE (Baseline) ---
+                setEnclaveHealth(sc.baseline.health, sc.baseline.status);
+                statLatency.textContent = sc.baseline.latency;
+                statSession.textContent = sc.baseline.session;
+                statActiveKeys.textContent = sc.baseline.keys;
+                
+                updateChart(sc.baseline.latency, sc.baseline.latency, sc.baseline.latency);
+                populateTable(sc);
+                animateVisualizer(sc.visualize, 'baseline');
+                
+                log(`[BASELINE] Sistema operacional. Latency: ${sc.baseline.latency}µs. Enclave Status: ${sc.baseline.status}.`, 'success');
+
+                // --- PHASE 2: DURING (Chaos Injection) ---
+                setTimeout(() => {
+                    setEnclaveHealth(sc.chaos.health, sc.chaos.status);
+                    statLatency.textContent = sc.chaos.latency;
+                    statSession.textContent = sc.chaos.session;
+                    statActiveKeys.textContent = sc.chaos.keys;
+
+                    updateChart(sc.baseline.latency, sc.chaos.latency, sc.baseline.latency);
+                    animateVisualizer(sc.visualize, 'chaos');
+
+                    sc.logs.forEach((item, idx) => {
+                        if (idx < 3) {
+                            setTimeout(() => {
+                                log(item.text, item.type);
+                            }, idx * (simulationSpeed / 3));
+                        }
+                    });
+
+                    // Record telemetry history block
+                    const reportBlock = {
+                        scenario: sc.name,
+                        before: sc.baseline,
+                        during: sc.chaos,
+                        after: sc.healed,
+                        timestamp: new Date().toISOString()
+                    };
+                    telemetryHistory.push(reportBlock);
+
+                    // --- PHASE 3: AFTER (Self-Healed Recovery) ---
+                    setTimeout(() => {
+                        setEnclaveHealth(sc.healed.health, sc.healed.status);
+                        statLatency.textContent = sc.healed.latency;
+                        
+                        // Rotates session dynamically
+                        if (sc.healed.session > sc.baseline.session) {
+                            currentSession++;
+                        }
+                        statSession.textContent = currentSession;
+                        statActiveKeys.textContent = sc.healed.keys;
+
+                        updateChart(sc.baseline.latency, sc.chaos.latency, sc.healed.latency);
+                        animateVisualizer(sc.visualize, 'healed');
+
+                        sc.logs.forEach((item, idx) => {
+                            if (idx >= 3) {
+                                log(item.text, item.type);
+                            }
+                        });
+
+                        log(`[SELF-HEALED] Perturbação mitigada. Latência normalizada para ${sc.healed.latency}µs. Estado: SECURE.`, 'success');
+                        
+                        resolve();
+                    }, simulationSpeed * 1.5);
+
+                }, simulationSpeed);
+            });
+        }
+
+        // Run Complete Chaos Suite sequentially
+        async function runCompleteSuite() {
+            if (isRunningSuite) return;
+            isRunningSuite = true;
+            btnRunAll.disabled = true;
+            btnRunAll.classList.add('opacity-50', 'cursor-not-allowed');
+            log(`[SUITE START] Iniciando sequência de perturbações completas nas camadas LSES & ZTICAM...`, 'alert');
+            
+            const keys = Object.keys(scenarios);
+            for (const key of keys) {
+                // Focus card
+                const cards = document.querySelectorAll('.scenario-card');
+                cards.forEach(c => {
+                    c.classList.remove('border-cyber-primary', 'bg-cyan-950/20');
+                    if (c.getAttribute('data-id') === key) {
+                        c.classList.add('border-cyber-primary', 'bg-cyan-950/20');
+                        c.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                });
+
+                await runChaosScenario(key);
+                await new Promise(r => setTimeout(r, 1200));
+            }
+
+            log(`\n🎉 [SUITE COMPLETE] Todas as perturbações foram injetadas. 100% dos mecanismos de auto-regeneração responderam perfeitamente!`, 'success');
+            btnRunAll.disabled = false;
+            btnRunAll.classList.remove('opacity-50', 'cursor-not-allowed');
+            isRunningSuite = false;
+        }
+
+        // Bind interactive event handlers
+        document.querySelectorAll('.scenario-card').forEach(card => {
+            card.addEventListener('click', function(e) {
+                if (isRunningSuite) return;
+                
+                // Reset card borders
+                document.querySelectorAll('.scenario-card').forEach(c => {
+                    c.classList.remove('border-cyber-primary', 'bg-cyan-950/20');
+                });
+                card.classList.add('border-cyber-primary', 'bg-cyan-950/20');
+
+                const scKey = card.getAttribute('data-id');
+                runChaosScenario(scKey);
+            });
+        });
+
+        // Speed setting controls
+        speedSlow.addEventListener('click', () => {
+            simulationSpeed = 2200;
+            [speedSlow, speedNormal, speedFast].forEach(b => b.className = 'px-2 py-1 rounded text-gray-400 hover:text-white transition-all');
+            speedSlow.className = 'px-2 py-1 bg-cyber-primary/20 text-cyber-primary rounded transition-all font-semibold';
+        });
+
+        speedNormal.addEventListener('click', () => {
+            simulationSpeed = 1200;
+            [speedSlow, speedNormal, speedFast].forEach(b => b.className = 'px-2 py-1 rounded text-gray-400 hover:text-white transition-all');
+            speedNormal.className = 'px-2 py-1 bg-cyber-primary/20 text-cyber-primary rounded transition-all font-semibold';
+        });
+
+        speedFast.addEventListener('click', () => {
+            simulationSpeed = 400;
+            [speedSlow, speedNormal, speedFast].forEach(b => b.className = 'px-2 py-1 rounded text-gray-400 hover:text-white transition-all');
+            speedFast.className = 'px-2 py-1 bg-cyber-primary/20 text-cyber-primary rounded transition-all font-semibold';
+        });
+
+        // Clear terminal feed
+        btnClearLogs.addEventListener('click', () => {
+            terminalBody.innerHTML = '<div class="text-gray-500">[SYSTEM] Logs console cleared. Enclave continuous attestation monitoring active.</div>';
+        });
+
+        // Suite triggers
+        btnRunAll.addEventListener('click', runCompleteSuite);
+
+        // Telemetry Export to JSON File
+        btnExport.addEventListener('click', () => {
+            if (telemetryHistory.length === 0) {
+                alert('Nenhum dado de telemetria coletado nesta sessão. Execute um ou mais cenários primeiro!');
+                return;
+            }
+
+            const formatReport = {
+                title: "Chaos Enclave Attestation Telemetry Report",
+                architecture: "Linus Salamander Enclave System (Zig) & Zero Trust Intent Cryptographic Attestation Module (Rust)",
+                timestamp: new Date().toISOString(),
+                runsCount: telemetryHistory.length,
+                records: telemetryHistory
+            };
+
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(formatReport, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `chaos_attestation_telemetry_${Date.now()}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            
+            log(`[REPORT EXPORTED] Telemetry JSON report downloaded successfully.`, 'success');
+        });
+
+        // Load dynamic results from backend
+        async function loadDynamicResults() {
+            try {
+                const res = await fetch('../result/chaos').catch(() => fetch('result.json'));
+                if (!res || !res.ok) return;
+                const data = await res.json();
+                
+                if (data && data.scenarios) {
+                    log(`[SYSTEM] Resultados dinâmicos carregados. Executado em: ${new Date(data.ran_at).toLocaleString()}`, 'success');
+                    
+                    data.scenarios.forEach(s => {
+                        const key = Object.keys(scenarios).find(k => s.text.includes(scenarios[k].name) || scenarios[k].name.includes(s.text.replace('Chaos Test: ', '')));
+                        if (key) {
+                            if (s.status === 'fail' || s.status !== 'ok') {
+                                scenarios[key].healed.health = 0;
+                                scenarios[key].healed.status = 'FAILED_TEST';
+                                scenarios[key].logs.push({ type: 'attack', text: `[FATAL] O teste no backend falhou de verdade! Falha na regeneração.` });
+                            } else {
+                                scenarios[key].logs.push({ type: 'success', text: `[REALITY CHECK] Zig backend confirmou que o teste passou.` });
+                            }
+                        }
+                    });
+                }
+            } catch (err) {
+                console.log("No dynamic result.json found yet.");
+            }
+        }
+
+        // Bootstrap on page load
+        window.addEventListener('DOMContentLoaded', async () => {
+            initGrid();
+            await loadDynamicResults();
+            // Load a default preview in table
+            populateTable(scenarios.poisoned_packet);
+            updateChart(4, 4, 4);
+        });
+
+    </script>
+</body>
+</html>

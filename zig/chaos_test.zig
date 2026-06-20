@@ -1,8 +1,8 @@
 const std = @import("std");
 const crypto = @import("crypto.zig");
 const storage = @import("storage.zig");
-const fast_buffer = @import("../../src/core/fast_buffer.zig");
-const event_bus = @import("../../src/core/event_bus.zig");
+const fast_buffer = @import("fast_buffer.zig");
+const event_bus = @import("event_bus.zig");
 const testing = std.testing;
 
 // Telemetry tracker for measuring state "Before", "During", and "After" chaos
@@ -547,6 +547,7 @@ test "Chaos Test: Epoch Rollback Ingestion" {
         },
         .nonce_registry = &registry,
         .kek_resolver = undefined,
+        .trusted_enclave_keys = null,
     };
 
     // 2. DURING: Inject the stale rollback envelope

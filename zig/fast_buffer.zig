@@ -37,6 +37,43 @@ export fn poll_packet(out_packet: *AgentPacket) bool {
     return false;
 }
 
+// Time-gated ingestion buffer for chaos/jitter tests.
+// max_jitter = 2: packets arriving > 2 pulse units ahead are rejected.
+// Zig 0.17: ArrayList is unmanaged — allocator stored in struct for per-call use.
+pub const PrimordialSoup = struct {
+    allocator: std.mem.Allocator,
+    packets: std.ArrayList([]const u8),
+    last_pulse: u64,
+    max_jitter: u64,
+
+    pub fn init(allocator: std.mem.Allocator, capacity: usize) !PrimordialSoup {
+        var packets = std.ArrayList([]const u8){};
+        try packets.ensureTotalCapacity(allocator, capacity);
+        return .{
+            .allocator = allocator,
+            .packets = packets,
+            .last_pulse = 0,
+            .max_jitter = 2,
+        };
+    }
+
+    pub fn deinit(self: *PrimordialSoup) void {
+        self.packets.deinit(self.allocator);
+    }
+
+    pub fn ingestPacket(self: *PrimordialSoup, payload: []const u8) !void {
+        const next_pulse = self.last_pulse + 1;
+        try self.packets.append(self.allocator, payload);
+        self.last_pulse = next_pulse;
+    }
+
+    pub fn ingestWithCustomTime(self: *PrimordialSoup, payload: []const u8, time: u64) !void {
+        if (time > self.last_pulse + self.max_jitter) return error.InconsistentPulse;
+        _ = payload;
+        self.last_pulse = time;
+    }
+};
+
 test "init_af_xdp success" {
     const res = init_af_xdp();
     try std.testing.expect(res == 0);

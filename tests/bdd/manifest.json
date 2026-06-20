@@ -1,0 +1,14 @@
+{
+  "id": "bdd",
+  "name": "BDD Gherkin Comptime",
+  "type": "bdd",
+  "lang": ["zig"],
+  "color": "#8b5cf6",
+  "description": "Comptime Gherkin parser: feature file parsed at compile-time, zero runtime overhead, native Zig error semantics",
+  "command": "BDD.zig\\zig-out\\bin\\zig_comptime_bdd_gherkin_keyword.exe",
+  "executable": true,
+  "features": 1,
+  "rules": 7,
+  "scenarios": 10,
+  "binary": "BDD.zig/zig-out/bin/zig_comptime_bdd_gherkin_keyword.exe"
+}

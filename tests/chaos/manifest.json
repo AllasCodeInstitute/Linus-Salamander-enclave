@@ -1,0 +1,12 @@
+{
+  "id": "chaos",
+  "name": "Chaos Engineering",
+  "type": "chaos",
+  "lang": ["zig", "rust"],
+  "color": "#f59e0b",
+  "description": "Fault injection: corrupted keys, replay attacks, memory faults, epoch rollback, enclave attestation failures",
+  "command": null,
+  "executable": false,
+  "scenarios": 12,
+  "binary": null
+}

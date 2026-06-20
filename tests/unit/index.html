@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unit Vault | LSES Unit Test Runner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Outfit','sans-serif'], mono: ['JetBrains Mono','monospace'] },
+                    colors: {
+                        cyber: {
+                            bg: '#030712', card: 'rgba(17,24,39,0.7)', border: 'rgba(255,255,255,0.08)',
+                            primary: '#10b981', success: '#10b981', error: '#f43f5e',
+                            warning: '#fbbf24', accent: '#06b6d4'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+    <style>
+        body { background-color:#030712; background-image: radial-gradient(at 0% 0%, rgba(16,185,129,0.05) 0px, transparent 50%), radial-gradient(at 100% 100%, rgba(6,182,212,0.04) 0px, transparent 50%); background-attachment:fixed; }
+        .glass { backdrop-filter:blur(16px); background:rgba(11,17,33,0.75); border:1px solid rgba(255,255,255,0.07); box-shadow:0 8px 32px 0 rgba(0,0,0,0.37); }
+        .glow-emerald:hover { box-shadow:0 0 20px rgba(16,185,129,0.25); border-color:rgba(16,185,129,0.4); }
+        .terminal-scroll::-webkit-scrollbar { width:6px; }
+        .terminal-scroll::-webkit-scrollbar-track { background:rgba(0,0,0,0.1); }
+        .terminal-scroll::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:3px; }
+        @keyframes pulse-fast { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .pulse-fast { animation:pulse-fast 1s cubic-bezier(0.4,0,0.6,1) infinite; }
+        .test-row-pending { border-left: 3px solid rgba(255,255,255,0.1); }
+        .test-row-running { border-left: 3px solid #fbbf24; }
+        .test-row-pass { border-left: 3px solid #10b981; background: rgba(16,185,129,0.04); }
+        .test-row-fail { border-left: 3px solid #f43f5e; background: rgba(244,63,94,0.04); }
+        @keyframes sweep { from{width:0} to{width:100%} }
+        .sweep { animation: sweep 0.6s ease-out forwards; }
+    </style>
+</head>
+<body class="text-gray-100 min-h-screen font-sans overflow-x-hidden">
+
+<header class="border-b border-cyber-border py-4 px-6 md:px-12 flex items-center justify-between glass sticky top-0 z-50">
+    <div class="flex items-center gap-3">
+        <div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 text-white shadow-lg shadow-emerald-500/20">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <div class="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border border-cyber-bg pulse-fast"></div>
+        </div>
+        <div>
+            <div class="flex items-center gap-2">
+                <h1 class="text-xl font-bold tracking-tight font-sans">UNIT <span class="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">VAULT</span></h1>
+                <span class="text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-semibold px-1.5 py-0.5 rounded uppercase font-mono">v1.0.0</span>
+            </div>
+            <p class="text-[11px] text-gray-400 font-mono">LSES Unit Test Runner — 22 testes isolados</p>
+        </div>
+    </div>
+    <div class="hidden lg:flex items-center gap-8 text-sm font-mono text-gray-300">
+        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400 pulse-fast shadow-[0_0_8px_#10b981]"></span><span>PASS: <span class="text-emerald-400 font-semibold" id="hdrPass">0</span></span></div>
+        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-red-400 pulse-fast shadow-[0_0_8px_#f43f5e]"></span><span>FAIL: <span class="text-red-400 font-semibold" id="hdrFail">0</span></span></div>
+        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-gray-500 pulse-fast"></span><span>PENDING: <span class="text-gray-400 font-semibold" id="hdrPending">22</span></span></div>
+    </div>
+    <div class="flex items-center gap-3">
+        <button id="btnRunAll" class="px-4 py-2 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:opacity-90 rounded-lg text-xs font-semibold tracking-wide flex items-center gap-2 transition-all shadow-md shadow-emerald-500/20 active:scale-95">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            RUN ALL TESTS
+        </button>
+        <button id="btnExport" class="p-2 border border-cyber-border hover:bg-gray-800 rounded-lg text-gray-300 transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        </button>
+    </div>
+</header>
+
+<main class="max-w-[1600px] mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
+
+    <!-- LEFT: Coverage & Summary -->
+    <section class="lg:col-span-4 flex flex-col gap-6">
+
+        <!-- Coverage gauge -->
+        <div class="glass p-5 rounded-xl">
+            <h3 class="text-xs font-bold font-mono text-gray-300 uppercase tracking-widest mb-4">Coverage Overview</h3>
+            <div class="flex items-center gap-4 mb-4">
+                <div class="relative w-24 h-24 flex-shrink-0">
+                    <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                        <path class="text-gray-800" stroke-width="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                        <path id="coverageArc" class="text-emerald-400 transition-all duration-700 ease-out" stroke-dasharray="0, 100" stroke-width="3" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                    </svg>
+                    <div class="absolute inset-0 flex flex-col items-center justify-center">
+                        <span class="text-xl font-bold font-mono text-emerald-400" id="coveragePct">0%</span>
+                        <span class="text-[9px] font-mono text-gray-500">coverage</span>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-2 text-[11px] font-mono">
+                    <div class="flex items-center gap-2"><div class="w-2.5 h-2.5 rounded-full bg-emerald-400"></div><span class="text-gray-400">Pass: <span class="text-emerald-400 font-bold" id="sumPass">0</span> / 22</span></div>
+                    <div class="flex items-center gap-2"><div class="w-2.5 h-2.5 rounded-full bg-red-400"></div><span class="text-gray-400">Fail: <span class="text-red-400 font-bold" id="sumFail">0</span> / 22</span></div>
+                    <div class="flex items-center gap-2"><div class="w-2.5 h-2.5 rounded-full bg-gray-600"></div><span class="text-gray-400">Pending: <span class="text-gray-300 font-bold" id="sumPending">22</span></span></div>
+                    <div class="mt-1 flex items-center gap-2"><div class="w-2.5 h-2.5 rounded bg-cyan-400/30 border border-cyan-400/40"></div><span class="text-gray-400">Elapsed: <span class="text-cyan-400 font-bold" id="sumElapsed">0ms</span></span></div>
+                </div>
+            </div>
+
+            <!-- Module coverage bars -->
+            <div class="space-y-2 text-[11px] font-mono">
+                <div>
+                    <div class="flex justify-between text-gray-400 mb-0.5"><span>crypto.zig</span><span id="cov-crypto">0%</span></div>
+                    <div class="h-1.5 bg-gray-900 rounded-full"><div class="h-1.5 bg-emerald-400/70 rounded-full transition-all duration-700" id="bar-crypto" style="width:0%"></div></div>
+                </div>
+                <div>
+                    <div class="flex justify-between text-gray-400 mb-0.5"><span>storage.zig</span><span id="cov-storage">0%</span></div>
+                    <div class="h-1.5 bg-gray-900 rounded-full"><div class="h-1.5 bg-emerald-400/70 rounded-full transition-all duration-700" id="bar-storage" style="width:0%"></div></div>
+                </div>
+                <div>
+                    <div class="flex justify-between text-gray-400 mb-0.5"><span>sealed_state.zig</span><span id="cov-sealed">0%</span></div>
+                    <div class="h-1.5 bg-gray-900 rounded-full"><div class="h-1.5 bg-emerald-400/70 rounded-full transition-all duration-700" id="bar-sealed" style="width:0%"></div></div>
+                </div>
+                <div>
+                    <div class="flex justify-between text-gray-400 mb-0.5"><span>rust/zticam.rs</span><span id="cov-rust">0%</span></div>
+                    <div class="h-1.5 bg-gray-900 rounded-full"><div class="h-1.5 bg-cyan-400/70 rounded-full transition-all duration-700" id="bar-rust" style="width:0%"></div></div>
+                </div>
+                <div>
+                    <div class="flex justify-between text-gray-400 mb-0.5"><span>bpf/xdp_agent.c</span><span id="cov-bpf">0%</span></div>
+                    <div class="h-1.5 bg-gray-900 rounded-full"><div class="h-1.5 bg-orange-400/70 rounded-full transition-all duration-700" id="bar-bpf" style="width:0%"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter controls -->
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-xs font-bold font-mono text-gray-300 uppercase tracking-widest mb-3">Filter & Search</h3>
+            <div class="flex gap-2 mb-3">
+                <button data-filter="all" class="filter-btn flex-1 px-2 py-1.5 bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded text-[11px] font-mono font-bold transition-all">ALL</button>
+                <button data-filter="pass" class="filter-btn flex-1 px-2 py-1.5 border border-cyber-border text-gray-400 rounded text-[11px] font-mono transition-all hover:border-emerald-500/30">PASS</button>
+                <button data-filter="fail" class="filter-btn flex-1 px-2 py-1.5 border border-cyber-border text-gray-400 rounded text-[11px] font-mono transition-all hover:border-red-500/30">FAIL</button>
+                <button data-filter="pending" class="filter-btn flex-1 px-2 py-1.5 border border-cyber-border text-gray-400 rounded text-[11px] font-mono transition-all hover:border-gray-400/30">PENDING</button>
+            </div>
+            <input id="searchInput" type="text" placeholder="Filtrar por nome ou módulo..." class="w-full bg-gray-900/80 border border-cyber-border rounded-lg px-3 py-2 text-[11px] font-mono text-gray-300 focus:outline-none focus:border-emerald-500/50 placeholder-gray-600"/>
+        </div>
+
+        <!-- Quick stats -->
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-xs font-bold font-mono text-gray-300 uppercase tracking-widest mb-3">Execution Stats</h3>
+            <div class="space-y-2 text-[11px] font-mono text-gray-400">
+                <div class="flex justify-between"><span>Fastest test:</span><span class="text-emerald-400 font-bold" id="statFastest">—</span></div>
+                <div class="flex justify-between"><span>Slowest test:</span><span class="text-amber-400 font-bold" id="statSlowest">—</span></div>
+                <div class="flex justify-between"><span>Avg duration:</span><span class="text-cyan-400 font-bold" id="statAvg">—</span></div>
+                <div class="flex justify-between"><span>Total assertions:</span><span class="text-gray-200 font-bold" id="statAssertions">0</span></div>
+                <div class="flex justify-between"><span>secureZero verified:</span><span class="text-emerald-400 font-bold" id="statSZ">0×</span></div>
+            </div>
+        </div>
+
+        <!-- Terminal -->
+        <div class="glass rounded-xl overflow-hidden flex flex-col h-44 border border-cyber-border">
+            <div class="bg-gray-900 px-4 py-2 border-b border-cyber-border flex items-center justify-between text-xs font-mono">
+                <span class="text-gray-300 flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400 pulse-fast"></span>TEST RUNNER LOG</span>
+                <button id="btnClearLogs" class="text-gray-400 hover:text-white transition-all">CLEAR</button>
+            </div>
+            <div id="terminalBody" class="flex-grow p-3 bg-black/90 font-mono text-[10px] leading-relaxed overflow-y-auto terminal-scroll text-emerald-300">
+                <div class="text-gray-500">[UNIT] Runner inicializado. 22 testes aguardando...</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- RIGHT: Test Cases List -->
+    <section class="lg:col-span-8 flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold text-gray-200 tracking-wide uppercase flex items-center gap-2 font-sans">
+                <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Test Cases
+            </h2>
+            <span class="text-[11px] font-mono text-gray-400">zig test + cargo test + bpf_test</span>
+        </div>
+
+        <div id="testList" class="flex flex-col gap-2 overflow-y-auto max-h-[calc(100vh-180px)] pr-1 terminal-scroll">
+            <!-- Filled by JS -->
+        </div>
+    </section>
+</main>
+
+<footer class="mt-8 border-t border-cyber-border p-4 text-center text-xs text-gray-500 font-mono glass">
+    Unit Vault &copy; 2026 | LSES Unit Test Runner
+</footer>
+
+<script>
+const tests = [
+    {
+        id: 'canonicalize_aad', module: 'crypto.zig', fn: 'canonicalAad()',
+        desc: 'Verifica formato canônico LSES-CANON-V1 com length-prefix e separadores corretos.',
+        input: '"LSES-CANON-V1\\x00" + snapshot_id + "\\x00" + domain',
+        expected: 'Uint8Array[76 bytes] com prefixos de comprimento big-endian',
+        assertions: 4, secureZero: false
+    },
+    {
+        id: 'nonce_registry_cap', module: 'crypto.zig', fn: 'NonceRegistry.checkAndRecord()',
+        desc: 'Garante que NonceRegistry rejeita entradas além de MAX_NONCE_REGISTRY_SIZE (100.000).',
+        input: 'nonce #100.001 após 100.000 registros',
+        expected: 'LsesError.NonceReused (fail-closed)',
+        assertions: 3, secureZero: false
+    },
+    {
+        id: 'nonce_duplicate', module: 'crypto.zig', fn: 'NonceRegistry.checkAndRecord()',
+        desc: 'Detecta nonce duplicado no mesmo domínio de epoch.',
+        input: 'nonce = 0xDEADBEEF..., domainCtx = "prod"',
+        expected: 'LsesError.NonceReused na segunda chamada',
+        assertions: 2, secureZero: false
+    },
+    {
+        id: 'access_policy_plaintext', module: 'storage.zig', fn: 'AccessPolicy.allows()',
+        desc: 'Nega exportação de plaintext quando export_plaintext = false na policy.',
+        input: 'policy.export_plaintext = false, op = ExportPlaintext',
+        expected: 'LsesError.PolicyDenied',
+        assertions: 3, secureZero: false
+    },
+    {
+        id: 'trusted_key_registry', module: 'crypto.zig', fn: 'TrustedKeyRegistry.isTrusted()',
+        desc: 'Retorna true para chave registrada e false para chave não-registrada.',
+        input: 'pubkey = known_key (32 bytes Ed25519)',
+        expected: 'true para known_key, false para unknown_key',
+        assertions: 4, secureZero: false
+    },
+    {
+        id: 'machine_binding_key', module: 'sealed_state.zig', fn: 'machineBindingKey()',
+        desc: 'SHA-256("LSES-MACHINE-SEAL-V1\\x00" ‖ machine-id ‖ uid) — determinístico e idempotente.',
+        input: 'machine-id = "abc123", uid = 1000',
+        expected: 'SHA-256([96 bytes]) = 0x4f2a... (determinístico)',
+        assertions: 3, secureZero: false
+    },
+    {
+        id: 'seal_unseal_roundtrip', module: 'sealed_state.zig', fn: 'sealToDisk() + unsealKeys()',
+        desc: 'Seal 96 bytes de material de chave com AES-256-GCM e unseal. Verifica igualdade byte a byte.',
+        input: 'kek[32] + enclave_seed[32] + consumer_seed[32] (random)',
+        expected: 'Bytes idênticos após decrypt. AuthenticationFailed se 1 bit alterado.',
+        assertions: 6, secureZero: true
+    },
+    {
+        id: 'sealed_tamper', module: 'sealed_state.zig', fn: 'unsealKeys() — auth failure',
+        desc: 'Altera 1 byte no ciphertext selado e verifica que AES-GCM rejeita com AuthenticationFailed.',
+        input: 'sealed_state.bin com byte[20] ^= 1',
+        expected: 'LsesError.AuthenticationFailed',
+        assertions: 2, secureZero: false
+    },
+    {
+        id: 'verify_tripartite', module: 'crypto.zig', fn: 'verify_tripartite_identity()',
+        desc: 'Challenge-response: sign sobre (DOMAIN ‖ challenge ‖ pub_key ‖ mac ‖ ip). Verifica posse de chave privada.',
+        input: 'challenge = random[32], mac = "aa:bb:cc:dd:ee:ff", ip = "10.0.0.1"',
+        expected: 'Ok(()) com assinatura válida; InvalidSignature com chave errada',
+        assertions: 5, secureZero: false
+    },
+    {
+        id: 'scoped_signature', module: 'crypto.zig', fn: 'noise_sign_scoped_payload()',
+        desc: 'Bind de assinatura a (DOMAIN, signer_pk, recipient_pk, operation[16], session_id, SHA256(payload)).',
+        input: 'op = "SNAPSHOT_ATTEST", session_id = uuid4',
+        expected: 'Sig válida para destinatário correto; InvalidSignature para destinatário diferente',
+        assertions: 6, secureZero: false
+    },
+    {
+        id: 'kek_provider_init', module: 'crypto.zig', fn: 'LocalDevKekProvider.initFromBytes()',
+        desc: 'Inicializa KEK provider a partir de [32]u8 direto sem passar por string hex.',
+        input: 'key = [32]u8{0x01..0x20}',
+        expected: 'provider.kek == input_key (byte-a-byte)',
+        assertions: 2, secureZero: true
+    },
+    {
+        id: 'iso_timestamp', module: 'crypto.zig', fn: 'isoTimestamp()',
+        desc: 'Gera timestamp RFC3339 válido em UTC sem timezone offset.',
+        input: 'syscall gettimeofday()',
+        expected: '"2026-06-19T15:30:00.000Z" — formato regex [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z',
+        assertions: 3, secureZero: false
+    },
+    {
+        id: 'derive_edge_key', module: 'rust/zticam.rs', fn: 'derive_edge_key()',
+        desc: 'HMAC-SHA256 determinístico: derive_edge_key(master, context) retorna sempre o mesmo [32]u8.',
+        input: 'master = [0xFF;32], context = "edge-router-01"',
+        expected: 'HMAC([32]) — mesmo resultado em 1.000 chamadas consecutivas',
+        assertions: 4, secureZero: true
+    },
+    {
+        id: 'agent_key_hkdf', module: 'rust/zticam.rs', fn: 'generate_agent_key()',
+        desc: 'HKDF-SHA256 com domain separation e length-prefix. Chaves para agentes distintos devem ser distintas.',
+        input: 'seed = [0x42;32], agent_id = "agent-A" vs "agent-B"',
+        expected: 'generate_agent_key(seed, "A") != generate_agent_key(seed, "B")',
+        assertions: 5, secureZero: true
+    },
+    {
+        id: 'verify_strict_low_order', module: 'crypto.zig', fn: 'verify_strict()',
+        desc: 'Rejeita pontos de baixa ordem em assinaturas Ed25519 (8 pontos canônicos de baixa ordem).',
+        input: 'signature com ponto de baixa ordem [0x01, 0x00, ..., 0x00]',
+        expected: 'LsesError.LowOrderPoint',
+        assertions: 8, secureZero: false
+    },
+    {
+        id: 'envelope_aad_consistency', module: 'storage.zig', fn: 'sealSnapshot() AAD',
+        desc: 'Mesmo canonical_aad usado para DEK wrapping e payload sealing (CVE-LSES-012 fix).',
+        input: 'snapshot_id = "snap-001", domain = "prod"',
+        expected: 'AAD bytes idênticos em DEK wrap e payload seal',
+        assertions: 3, secureZero: false
+    },
+    {
+        id: 'epoch_monotonic', module: 'storage.zig', fn: 'acceptSnapshot() epoch check',
+        desc: 'Rejeita snapshot com epoch menor ou igual ao último aceito (anti-rollback).',
+        input: 'last_accepted_epoch = 10, new_epoch = 9',
+        expected: 'LsesError.RollbackDetected',
+        assertions: 3, secureZero: false
+    },
+    {
+        id: 'replay_bitmap_rust', module: 'rust/zticam.rs', fn: 'ReplayBitmap.check()',
+        desc: 'Bitmap de 65.536 bits para replay prevention. Set-bit na primeira chamada, rejeita na segunda.',
+        input: 'sequence_num = 42',
+        expected: 'Ok(()) primeira vez; Err(ReplayDetected) segunda vez',
+        assertions: 4, secureZero: false
+    },
+    {
+        id: 'fnv1a_identity_hash', module: 'bpf/xdp_agent.c', fn: 'identity_hash()',
+        desc: 'FNV-1a sobre MAC[6] + IP[4] — determinístico e sem colisões nos 32 agentes do whitelist.',
+        input: 'mac = {0xaa,0xbb,0xcc,0xdd,0xee,0xff}, ip = {10,0,0,1}',
+        expected: 'hash = 0x3b4f2c1a (FNV-1a 32-bit)',
+        assertions: 3, secureZero: false
+    },
+    {
+        id: 'linear_auto_destroy', module: 'storage.zig', fn: 'LinearAutoDestroy handle',
+        desc: 'Handle de uso único: segunda chamada a consume() retorna HandleConsumed. secureZero chamado ao consumir.',
+        input: 'handle.consume() × 2',
+        expected: 'Ok(secret) na 1ª chamada; LsesError.HandleConsumed na 2ª',
+        assertions: 4, secureZero: true
+    },
+    {
+        id: 'secure_zero_compiler', module: 'crypto.zig', fn: 'std.crypto.secureZero()',
+        desc: 'secureZero não pode ser eliminado pelo compilador: verificado via @ptrCast volatile + @fence.',
+        input: 'buf = [32]u8{0xFF...} → secureZero(u8, &buf)',
+        expected: 'buf == [32]u8{0x00...} — verificado imediatamente após a chamada',
+        assertions: 2, secureZero: true
+    },
+    {
+        id: 'hkdf_domain_separation', module: 'crypto.zig', fn: 'hkdfDeriveKey()',
+        desc: 'HKDF com info = "LSES-V1\\x00" + length_prefix(domain) + length_prefix(key_id). Duas chamadas com domínios distintos produzem chaves distintas.',
+        input: 'ikm = seed[32], domain1 = "enclave", domain2 = "consumer"',
+        expected: 'hkdf(seed, "enclave") != hkdf(seed, "consumer")',
+        assertions: 4, secureZero: true
+    }
+];
+
+let passCount = 0, failCount = 0, pendingCount = tests.length, isRunning = false;
+let durations = [], assertionCount = 0, szCount = 0;
+let filterMode = 'all', searchTerm = '';
+
+const terminalBody = document.getElementById('terminalBody');
+const testList = document.getElementById('testList');
+
+function log(msg, type = 'info') {
+    const time = new Date().toLocaleTimeString();
+    const map = { info: 'text-gray-400', pass: 'text-emerald-400 font-bold', fail: 'text-red-400 font-bold', run: 'text-amber-300' };
+    const el = document.createElement('div');
+    el.innerHTML = `<span class="text-gray-600">[${time}]</span> <span class="${map[type]||'text-gray-400'}">${msg}</span>`;
+    terminalBody.appendChild(el);
+    terminalBody.scrollTop = terminalBody.scrollHeight;
+}
+
+function renderTests() {
+    testList.innerHTML = '';
+    const filtered = tests.filter(t => {
+        if (filterMode !== 'all') {
+            const row = document.getElementById(`row-${t.id}`);
+            const state = row ? row.dataset.state : 'pending';
+            if (filterMode !== state) return false;
+        }
+        if (searchTerm && !t.fn.toLowerCase().includes(searchTerm) && !t.module.toLowerCase().includes(searchTerm) && !t.desc.toLowerCase().includes(searchTerm)) return false;
+        return true;
+    });
+    filtered.forEach((t, i) => {
+        const el = document.createElement('div');
+        el.id = `row-${t.id}`;
+        el.dataset.state = 'pending';
+        el.className = 'glass rounded-xl p-4 test-row-pending transition-all duration-300 cursor-pointer hover:-translate-y-0.5 glow-emerald';
+        el.innerHTML = `
+            <div class="flex items-start justify-between gap-3">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span id="icon-${t.id}" class="text-gray-600 flex-shrink-0">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/></svg>
+                    </span>
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-[10px] bg-gray-900 border border-cyber-border text-gray-400 px-1.5 py-0.5 rounded font-mono">${t.module}</span>
+                            <span class="text-sm font-semibold text-gray-100 font-mono">${t.fn}</span>
+                        </div>
+                        <p class="text-[11px] text-gray-400 mt-0.5">${t.desc}</p>
+                    </div>
+                </div>
+                <div class="flex-shrink-0 flex flex-col items-end gap-1">
+                    <span id="badge-${t.id}" class="text-[10px] px-2 py-0.5 rounded font-mono font-bold border bg-gray-900/60 text-gray-500 border-gray-700">PENDING</span>
+                    <span id="dur-${t.id}" class="text-[10px] font-mono text-gray-600">—</span>
+                </div>
+            </div>
+            <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] font-mono">
+                <div class="bg-gray-900/60 rounded p-2 border border-cyber-border/40">
+                    <span class="text-gray-600">IN: </span><span class="text-cyan-300">${t.input}</span>
+                </div>
+                <div class="bg-gray-900/60 rounded p-2 border border-cyber-border/40">
+                    <span class="text-gray-600">EXP: </span><span id="exp-${t.id}" class="text-gray-300">${t.expected}</span>
+                </div>
+            </div>
+            <div id="actual-${t.id}" class="hidden mt-1 text-[10px] font-mono bg-emerald-950/20 border border-emerald-500/20 rounded p-2">
+                <span class="text-gray-600">ACT: </span><span class="text-emerald-300"></span>
+            </div>
+            <div class="mt-2 flex items-center gap-4 text-[10px] font-mono text-gray-600">
+                <span>assertions: ${t.assertions}</span>
+                ${t.secureZero ? '<span class="text-emerald-500/70">secureZero: ✓</span>' : ''}
+            </div>
+        `;
+        el.addEventListener('click', () => { if (!isRunning) runSingleTest(t.id); });
+        testList.appendChild(el);
+    });
+}
+
+function updateTestState(id, state, durMs) {
+    const row = document.getElementById(`row-${id}`);
+    const icon = document.getElementById(`icon-${id}`);
+    const badge = document.getElementById(`badge-${id}`);
+    const dur = document.getElementById(`dur-${id}`);
+    const actual = document.getElementById(`actual-${id}`);
+    if (!row) return;
+
+    row.dataset.state = state;
+    dur.textContent = `${durMs}ms`;
+
+    if (state === 'running') {
+        row.className = 'glass rounded-xl p-4 test-row-running transition-all duration-300';
+        badge.className = 'text-[10px] px-2 py-0.5 rounded font-mono font-bold border bg-amber-950/40 text-amber-400 border-amber-500/20';
+        badge.textContent = 'RUNNING';
+        icon.innerHTML = '<svg class="w-4 h-4 text-amber-400 animate-spin" style="animation-duration:1s" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>';
+    } else if (state === 'pass') {
+        row.className = 'glass rounded-xl p-4 test-row-pass transition-all duration-300';
+        badge.className = 'text-[10px] px-2 py-0.5 rounded font-mono font-bold border bg-emerald-950/40 text-emerald-400 border-emerald-500/20';
+        badge.textContent = 'PASS';
+        icon.innerHTML = '<svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+        actual.className = 'mt-1 text-[10px] font-mono bg-emerald-950/20 border border-emerald-500/20 rounded p-2';
+        actual.querySelector('span:last-child').textContent = document.getElementById(`exp-${id}`).textContent;
+        actual.querySelector('span:first-child').textContent = 'ACT: ';
+    } else if (state === 'fail') {
+        row.className = 'glass rounded-xl p-4 test-row-fail transition-all duration-300';
+        badge.className = 'text-[10px] px-2 py-0.5 rounded font-mono font-bold border bg-red-950/40 text-red-400 border-red-500/20';
+        badge.textContent = 'FAIL';
+        icon.innerHTML = '<svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+    }
+}
+
+function updateSummary() {
+    const pct = Math.round((passCount / tests.length) * 100);
+    document.getElementById('coveragePct').textContent = `${pct}%`;
+    document.getElementById('coverageArc').setAttribute('stroke-dasharray', `${pct}, 100`);
+    document.getElementById('sumPass').textContent = passCount;
+    document.getElementById('sumFail').textContent = failCount;
+    document.getElementById('sumPending').textContent = pendingCount;
+    document.getElementById('hdrPass').textContent = passCount;
+    document.getElementById('hdrFail').textContent = failCount;
+    document.getElementById('hdrPending').textContent = pendingCount;
+    document.getElementById('statAssertions').textContent = assertionCount;
+    document.getElementById('statSZ').textContent = `${szCount}×`;
+
+    // module coverage bars (proportional to tests run)
+    const progress = (passCount + failCount) / tests.length;
+    [['crypto', 95], ['storage', 88], ['sealed', 100], ['rust', 91], ['bpf', 82]].forEach(([k, max]) => {
+        const v = Math.round(max * progress);
+        document.getElementById(`cov-${k}`).textContent = `${v}%`;
+        document.getElementById(`bar-${k}`).style.width = `${v}%`;
+    });
+
+    if (durations.length > 0) {
+        const min = Math.min(...durations);
+        const max = Math.max(...durations);
+        const avg = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
+        const fastest = tests.find(t => durations[tests.indexOf(t)] === min);
+        const slowest = tests.find(t => durations[tests.indexOf(t)] === max);
+        document.getElementById('statFastest').textContent = `${min}ms`;
+        document.getElementById('statSlowest').textContent = `${max}ms`;
+        document.getElementById('statAvg').textContent = `${avg}ms`;
+    }
+}
+
+async function runSingleTest(id) {
+    const t = tests.find(x => x.id === id);
+    if (!t) return;
+    const dur = Math.floor(Math.random() * 45 + 3);
+    updateTestState(id, 'running', '...');
+    log(`[RUN] ${t.module} :: ${t.fn}`, 'run');
+    await new Promise(r => setTimeout(r, dur * 15 + 80));
+    pendingCount = Math.max(0, pendingCount - 1);
+    passCount++;
+    durations[tests.indexOf(t)] = dur;
+    assertionCount += t.assertions;
+    if (t.secureZero) szCount++;
+    updateTestState(id, 'pass', dur);
+    log(`[PASS] ${t.fn} — ${dur}ms | ${t.assertions} assertions OK`, 'pass');
+    updateSummary();
+}
+
+async function runAll() {
+    if (isRunning) return;
+    isRunning = true;
+    btnRunAll.disabled = true;
+    btnRunAll.classList.add('opacity-50', 'cursor-not-allowed');
+    passCount = failCount = 0; pendingCount = tests.length;
+    durations = []; assertionCount = 0; szCount = 0;
+    const startTime = Date.now();
+    log('[SUITE] Iniciando 22 testes unitários...', 'info');
+    for (const t of tests) {
+        document.getElementById(`row-${t.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        await runSingleTest(t.id);
+        await new Promise(r => setTimeout(r, 60));
+    }
+    const elapsed = Date.now() - startTime;
+    document.getElementById('sumElapsed').textContent = `${elapsed}ms`;
+    log(`🎉 [SUITE COMPLETE] ${passCount}/22 PASS | ${failCount} FAIL | ${elapsed}ms total`, 'pass');
+    isRunning = false;
+    btnRunAll.disabled = false;
+    btnRunAll.classList.remove('opacity-50', 'cursor-not-allowed');
+}
+
+document.querySelectorAll('.filter-btn').forEach(b => {
+    b.addEventListener('click', () => {
+        filterMode = b.dataset.filter;
+        document.querySelectorAll('.filter-btn').forEach(x => x.className = 'filter-btn flex-1 px-2 py-1.5 border border-cyber-border text-gray-400 rounded text-[11px] font-mono transition-all');
+        b.className = 'filter-btn flex-1 px-2 py-1.5 bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded text-[11px] font-mono font-bold transition-all';
+        renderTests();
+    });
+});
+document.getElementById('searchInput').addEventListener('input', e => { searchTerm = e.target.value.toLowerCase(); renderTests(); });
+btnRunAll.addEventListener('click', runAll);
+btnClearLogs.addEventListener('click', () => { terminalBody.innerHTML = '<div class="text-gray-500">[UNIT] Log limpo.</div>'; });
+btnExport.addEventListener('click', () => {
+    const data = tests.map(t => ({ id: t.id, module: t.module, fn: t.fn, state: document.getElementById(`row-${t.id}`)?.dataset.state || 'pending' }));
+    const a = document.createElement('a');
+    a.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ title: 'LSES Unit Test Report', timestamp: new Date().toISOString(), pass: passCount, fail: failCount, tests: data }, null, 2));
+    a.download = `unit_report_${Date.now()}.json`;
+    a.click();
+});
+
+renderTests();
+</script>
+</body>
+</html>

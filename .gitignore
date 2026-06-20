@@ -1,7 +1,8 @@
 # CVE-LSES-017: Comprehensive .gitignore to prevent leaking build artifacts,
 # sealed state files, and credentials.
-
+SECURITY_VULNERABILITIES.pdf
 # Editor artifacts
+.claude
 .kilo
 *.swp
 *.swo

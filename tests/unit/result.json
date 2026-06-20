@@ -1,0 +1,9 @@
+{
+  "ran_at": null,
+  "duration_ms": null,
+  "passed": 0,
+  "failed": 0,
+  "total": 0,
+  "status": "pending",
+  "exit_code": null
+}

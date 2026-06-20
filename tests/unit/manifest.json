@@ -1,0 +1,12 @@
+{
+  "id": "unit",
+  "name": "Unit Tests",
+  "type": "unit",
+  "lang": ["zig", "rust", "go", "python", "typescript"],
+  "color": "#06b6d4",
+  "description": "22 isolated tests: canonicalAad, NonceRegistry, TrustedKeyRegistry, machineBindingKey, OWASP modules",
+  "command": null,
+  "executable": false,
+  "count": 22,
+  "binary": null
+}

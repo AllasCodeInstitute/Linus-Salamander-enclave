@@ -47,16 +47,11 @@ test "CSPRNG - randomBytes entropy and fallback" {
     crypto.EnclaveCrypto.randomBytes(&buf1);
     crypto.EnclaveCrypto.randomBytes(&buf2);
 
-    // Verify they are not the same (high probability)
     try testing.expect(!std.mem.eql(u8, &buf1, &buf2));
-    
-    // Verify it doesn't leave all zeros
+
     var all_zeros = true;
     for (buf1) |b| {
-        if (b != 0) {
-            all_zeros = false;
-            break;
-        }
+        if (b != 0) { all_zeros = false; break; }
     }
     try testing.expect(!all_zeros);
 }
@@ -67,18 +62,13 @@ test "Snapshot Identity - deterministic formatting and mutation invalidation" {
 
     const cb1 = try crypto.canonicalizeSnapshotBody(testing.allocator, body);
     defer testing.allocator.free(cb1);
-
     const hash1 = crypto.computeSnapshotId(cb1);
 
-    // Mutate the operation field
     body.operation = "rotate_secret";
-
     const cb2 = try crypto.canonicalizeSnapshotBody(testing.allocator, body);
     defer testing.allocator.free(cb2);
-
     const hash2 = crypto.computeSnapshotId(cb2);
 
-    // Mutation must yield a different snapshot hash
     try testing.expect(!std.mem.eql(u8, &hash1, &hash2));
 }
 
@@ -88,13 +78,11 @@ test "Dual-Attestation - counter-signing with invalid key fails" {
 
     const cb = try crypto.canonicalizeSnapshotBody(testing.allocator, body);
     defer testing.allocator.free(cb);
-
     const snapshot_id = crypto.computeSnapshotId(cb);
 
     const sig_input = try crypto.canonicalizeSignatureInput(testing.allocator, snapshot_id, body);
     defer testing.allocator.free(sig_input);
 
-    // Generate keys
     var enc_seed: [32]u8 = undefined;
     crypto.EnclaveCrypto.randomBytes(&enc_seed);
     const enc_kp = try std.crypto.sign.Ed25519.KeyPair.generateDeterministic(enc_seed);
@@ -103,12 +91,8 @@ test "Dual-Attestation - counter-signing with invalid key fails" {
     crypto.EnclaveCrypto.randomBytes(&cons_seed);
     const cons_kp = try std.crypto.sign.Ed25519.KeyPair.generateDeterministic(cons_seed);
 
-    // Valid Signatures
-    const enc_private = enc_kp.secret_key.toBytes();
-    const cons_private = cons_kp.secret_key.toBytes();
-
-    const enc_sig = try crypto.signEd25519(sig_input, enc_private);
-    const cons_sig = try crypto.signEd25519(sig_input, cons_private);
+    const enc_sig = try crypto.signEd25519(sig_input, enc_kp.secret_key.toBytes());
+    const cons_sig = try crypto.signEd25519(sig_input, cons_kp.secret_key.toBytes());
 
     const envelope = crypto.SnapshotEnvelope{
         .snapshot_body = body,
@@ -132,7 +116,6 @@ test "Dual-Attestation - counter-signing with invalid key fails" {
 
     const allowed = try testing.allocator.alloc([]const u8, 1);
     allowed[0] = "cons-pk-id";
-
     const policy = crypto.AccessPolicy{
         .allow_plaintext_export = true,
         .allowed_consumers = allowed,
@@ -146,17 +129,15 @@ test "Dual-Attestation - counter-signing with invalid key fails" {
         .verification_keys = vk,
         .policy = policy,
         .nonce_registry = &registry,
-        .kek_resolver = undefined, // not used for pure verification
+        .kek_resolver = undefined,
+        .trusted_enclave_keys = null,
     };
 
-    // Valid envelope must pass verification
     try crypto.verifySnapshot(testing.allocator, envelope, &ctx);
 
-    // Tamper with countersignature -> must fail
-    var tampered_envelope = envelope;
-    tampered_envelope.attestations.consumer_countersignature[0] ^= 1;
-
-    try testing.expectError(crypto.LsesError.InvalidConsumerCountersignature, crypto.verifySnapshot(testing.allocator, tampered_envelope, &ctx));
+    var tampered = envelope;
+    tampered.attestations.consumer_countersignature[0] ^= 1;
+    try testing.expectError(crypto.LsesError.InvalidConsumerCountersignature, crypto.verifySnapshot(testing.allocator, tampered, &ctx));
 }
 
 // Group 4: Envelope Encryption
@@ -170,12 +151,9 @@ test "Envelope Encryption - KEK wrapping and WRONG KEK ID rejection" {
     crypto.EnclaveCrypto.randomBytes(&plaintext_dek);
 
     const wrapped = try provider.provider().wrap(testing.allocator, &plaintext_dek, "test-kek-001");
-
-    // Unwrap with the correct provider and key_id -> must succeed
     const unwrapped = try provider.provider().unwrap(testing.allocator, wrapped, "test-kek-001");
     try testing.expectEqualStrings(&plaintext_dek, &unwrapped);
 
-    // Attempting with wrong key_id must throw error
     var bad_wrapped = wrapped;
     bad_wrapped.key_id = "wrong-kek-id";
     try testing.expectError(crypto.LsesError.StaleKekId, provider.provider().unwrap(testing.allocator, bad_wrapped, "test-kek-001"));
@@ -193,24 +171,19 @@ test "Payload Auth - tampered ciphertext, auth tag or AAD must fail decryption" 
     const sealed = try crypto.sealPayload(testing.allocator, plaintext, &dek, nonce, aad);
     defer testing.allocator.free(sealed.ciphertext);
 
-    // Success run
     const unsealed = try crypto.unsealPayload(testing.allocator, sealed.ciphertext, sealed.auth_tag, &dek, nonce, aad);
     defer testing.allocator.free(unsealed);
     try testing.expectEqualStrings(plaintext, unsealed);
 
-    // Tampered Ciphertext
     var bad_cipher = try testing.allocator.dupe(u8, sealed.ciphertext);
     defer testing.allocator.free(bad_cipher);
     bad_cipher[0] ^= 1;
-
     try testing.expectError(crypto.LsesError.InvalidAuthTag, crypto.unsealPayload(testing.allocator, bad_cipher, sealed.auth_tag, &dek, nonce, aad));
 
-    // Tampered Auth Tag
     var bad_tag = sealed.auth_tag;
     bad_tag[0] ^= 1;
     try testing.expectError(crypto.LsesError.InvalidAuthTag, crypto.unsealPayload(testing.allocator, sealed.ciphertext, bad_tag, &dek, nonce, aad));
 
-    // Tampered AAD
     try testing.expectError(crypto.LsesError.InvalidAuthTag, crypto.unsealPayload(testing.allocator, sealed.ciphertext, sealed.auth_tag, &dek, nonce, "project=lses&epoch=2"));
 }
 
@@ -223,16 +196,9 @@ test "Chain Recovery - detect rollback / nonce replay attacks" {
     const snapshot_id1 = @as([32]u8, @splat(0xaa));
     const snapshot_id2 = @as([32]u8, @splat(0xbb));
 
-    // First use: must succeed
     try registry.checkAndRecord(snapshot_id1, .payload, "test-context", nonce);
-
-    // Idempotent use with same snapshot: must succeed
     try registry.checkAndRecord(snapshot_id1, .payload, "test-context", nonce);
-
-    // Second use with a different snapshot/same context: must fail with NonceReused
     try testing.expectError(crypto.LsesError.NonceReused, registry.checkAndRecord(snapshot_id2, .payload, "test-context", nonce));
-
-    // Use with a different context/same snapshot: must succeed
     try registry.checkAndRecord(snapshot_id1, .payload, "other-context", nonce);
 }
 
@@ -242,23 +208,18 @@ test "Read Behavior - short-lived runtime handles expiring cleanly" {
     defer store.deinit();
 
     const plaintext = "volatile-secret-value-777";
-
     const handle = try store.insert(plaintext, 2, 1000);
     const handle_id = handle.handle_id;
 
-    // Success read within bounds
     const read1 = store.get(handle_id, 1000);
     try testing.expect(read1 != null);
     try testing.expectEqualStrings(plaintext, read1.?);
     testing.allocator.free(read1.?);
 
-    // Second read -> must return null because it's single use (consumed)
     const read_second = store.get(handle_id, 1000);
     try testing.expect(read_second == null);
 
-    // Create another handle to test expiry
     const handle2 = try store.insert(plaintext, 2, 1000);
-    // Read after expiry -> must return null
     const read2 = store.get(handle2.handle_id, 1005);
     try testing.expect(read2 == null);
 }
@@ -270,7 +231,7 @@ test "Storage Scan - zero plaintext leaked to files" {
     const io = thread_io.io();
 
     const filename = "enclave.sealed.json";
-    const file = std.Io.Dir.cwd().openFile(io, filename, .{}) catch return; // skip if demo main wasn't run yet
+    const file = std.Io.Dir.cwd().openFile(io, filename, .{}) catch return;
     defer file.close(io);
 
     var read_buf: [4096]u8 = undefined;
@@ -278,7 +239,6 @@ test "Storage Scan - zero plaintext leaked to files" {
     const data = try r.interface.allocRemaining(testing.allocator, std.Io.Limit.limited(1024 * 1024));
     defer testing.allocator.free(data);
 
-    // Ensure the sensitive plaintext secret we used in demo is NOT present in raw ASCII
     const leaked = std.mem.indexOf(u8, data, "ls_secret_super_secure_token_12345");
     try testing.expect(leaked == null);
 }
@@ -299,17 +259,13 @@ fn createSignedMockEnvelope(
 
     const cb = try crypto.canonicalizeSnapshotBody(allocator, body);
     defer allocator.free(cb);
-
     const snapshot_id = crypto.computeSnapshotId(cb);
 
     const sig_input = try crypto.canonicalizeSignatureInput(allocator, snapshot_id, body);
     defer allocator.free(sig_input);
 
-    const enc_private = enc_kp.secret_key.toBytes();
-    const cons_private = cons_kp.secret_key.toBytes();
-
-    const enc_sig = try crypto.signEd25519(sig_input, enc_private);
-    const cons_sig = try crypto.signEd25519(sig_input, cons_private);
+    const enc_sig = try crypto.signEd25519(sig_input, enc_kp.secret_key.toBytes());
+    const cons_sig = try crypto.signEd25519(sig_input, cons_kp.secret_key.toBytes());
 
     return crypto.SnapshotEnvelope{
         .snapshot_body = body,
@@ -346,7 +302,7 @@ test "rollback epoch rejection" {
     var ctx = crypto.VerificationContext{
         .mode = .recovery_limited,
         .trusted_chain_head = null,
-        .last_accepted_epoch = 2, // Last accepted is higher than envelope's epoch
+        .last_accepted_epoch = 2,
         .verification_keys = vk,
         .policy = crypto.AccessPolicy{
             .allow_plaintext_export = true,
@@ -354,6 +310,7 @@ test "rollback epoch rejection" {
         },
         .nonce_registry = &registry,
         .kek_resolver = undefined,
+        .trusted_enclave_keys = null,
     };
 
     try testing.expectError(crypto.LsesError.RollbackDetected, crypto.verifySnapshot(testing.allocator, env, &ctx));
@@ -372,8 +329,7 @@ test "chain fork/gap detection" {
     defer store.deinit();
 
     const env1 = try createSignedMockEnvelope(testing.allocator, enc_kp, cons_kp, 1, @as([32]u8, @splat(0)));
-    const bad_prev_hash = @as([32]u8, @splat(9));
-    const env2 = try createSignedMockEnvelope(testing.allocator, enc_kp, cons_kp, 2, bad_prev_hash);
+    const env2 = try createSignedMockEnvelope(testing.allocator, enc_kp, cons_kp, 2, @as([32]u8, @splat(9)));
 
     const envelopes = [_]crypto.SnapshotEnvelope{ env1, env2 };
 
@@ -398,14 +354,11 @@ test "chain fork/gap detection" {
         },
         .nonce_registry = &registry,
         .kek_resolver = undefined,
+        .trusted_enclave_keys = null,
     };
 
     try testing.expectError(crypto.LsesError.ChainMismatch, crypto.recoverLatest(
-        testing.allocator,
-        &envelopes,
-        &ctx,
-        &store,
-        1000,
+        testing.allocator, &envelopes, &ctx, &store, 1000,
     ));
 }
 
@@ -432,7 +385,7 @@ test "strict mode trust anchor enforcement" {
 
     var ctx = crypto.VerificationContext{
         .mode = .strict,
-        .trusted_chain_head = null, // Empty anchor in strict mode!
+        .trusted_chain_head = null,
         .last_accepted_epoch = 0,
         .verification_keys = vk,
         .policy = crypto.AccessPolicy{
@@ -441,6 +394,7 @@ test "strict mode trust anchor enforcement" {
         },
         .nonce_registry = &registry,
         .kek_resolver = undefined,
+        .trusted_enclave_keys = null,
     };
 
     try testing.expectError(crypto.LsesError.MissingTrustAnchor, crypto.verifySnapshot(testing.allocator, env, &ctx));
@@ -453,10 +407,7 @@ test "context separation integrity" {
     const nonce = @as([12]u8, @splat(7));
     const snapshot_id = @as([32]u8, @splat(0xcc));
 
-    // Register as payload
     try registry.checkAndRecord(snapshot_id, .payload, "common-context", nonce);
-
-    // Register same nonce/context but as dek_wrap -> must succeed! Domain separation prevents mix-ups.
     try registry.checkAndRecord(snapshot_id, .dek_wrap, "common-context", nonce);
 }
 

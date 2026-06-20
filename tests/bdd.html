@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BDD Vault | LSES Behavior-Driven Test Suite</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Outfit','sans-serif'], mono: ['JetBrains Mono','monospace'] },
+                    colors: {
+                        cyber: {
+                            bg: '#030712', card: 'rgba(17,24,39,0.7)', border: 'rgba(255,255,255,0.08)',
+                            primary: '#06b6d4', success: '#10b981', error: '#f43f5e',
+                            warning: '#fbbf24', accent: '#a855f7'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+    <style>
+        body { background-color:#030712; background-image: radial-gradient(at 0% 0%, rgba(168,85,247,0.07) 0px, transparent 50%), radial-gradient(at 100% 0%, rgba(6,182,212,0.05) 0px, transparent 50%), radial-gradient(at 50% 100%, rgba(16,185,129,0.03) 0px, transparent 50%); background-attachment:fixed; }
+        .glass { backdrop-filter:blur(16px); background:rgba(11,17,33,0.75); border:1px solid rgba(255,255,255,0.07); box-shadow:0 8px 32px 0 rgba(0,0,0,0.37); }
+        .glow-purple:hover { box-shadow:0 0 20px rgba(168,85,247,0.2); border-color:rgba(168,85,247,0.35); }
+        .terminal-scroll::-webkit-scrollbar { width:6px; }
+        .terminal-scroll::-webkit-scrollbar-track { background:rgba(0,0,0,0.1); }
+        .terminal-scroll::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:3px; }
+        @keyframes pulse-fast { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .pulse-fast { animation:pulse-fast 1s cubic-bezier(0.4,0,0.6,1) infinite; }
+        .step-given { border-left: 3px solid #6366f1; background: rgba(99,102,241,0.04); }
+        .step-when { border-left: 3px solid #06b6d4; background: rgba(6,182,212,0.04); }
+        .step-then { border-left: 3px solid #10b981; background: rgba(16,185,129,0.04); }
+        .step-and { border-left: 3px solid #a855f7; background: rgba(168,85,247,0.04); }
+        .step-running { animation: pulse-fast 0.8s infinite; }
+        .step-pass .step-icon { color: #10b981; }
+        .step-fail .step-icon { color: #f43f5e; }
+        .scenario-pending { border-left: 4px solid rgba(255,255,255,0.1); }
+        .scenario-running { border-left: 4px solid #fbbf24; }
+        .scenario-pass { border-left: 4px solid #10b981; }
+        .scenario-fail { border-left: 4px solid #f43f5e; }
+        .feature-block { border: 1px solid rgba(168,85,247,0.2); }
+        @keyframes step-appear { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+        .step-appear { animation: step-appear 0.25s ease-out forwards; }
+    </style>
+</head>
+<body class="text-gray-100 min-h-screen font-sans overflow-x-hidden">
+
+<header class="border-b border-cyber-border py-4 px-6 md:px-12 flex items-center justify-between glass sticky top-0 z-50">
+    <div class="flex items-center gap-3">
+        <div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-500 to-cyan-500 text-white shadow-lg shadow-purple-500/20">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+            <div class="absolute -top-0.5 -right-0.5 w-3 h-3 bg-cyber-success rounded-full border border-cyber-bg pulse-fast"></div>
+        </div>
+        <div>
+            <div class="flex items-center gap-2">
+                <h1 class="text-xl font-bold tracking-tight font-sans">BDD <span class="bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">VAULT</span></h1>
+                <span class="text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-400 font-semibold px-1.5 py-0.5 rounded uppercase font-mono">v1.0.0</span>
+            </div>
+            <p class="text-[11px] text-gray-400 font-mono">LSES Behavior-Driven Test Suite — Gherkin Style</p>
+        </div>
+    </div>
+    <div class="hidden lg:flex items-center gap-8 text-sm font-mono text-gray-300">
+        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-purple-400 pulse-fast shadow-[0_0_8px_#a855f7]"></span><span>FEATURES: <span class="text-purple-400 font-semibold" id="hdrFeatures">6</span></span></div>
+        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400 pulse-fast shadow-[0_0_8px_#10b981]"></span><span>SCENARIOS: <span class="text-emerald-400 font-semibold" id="hdrScenarios">0</span>/18</span></div>
+        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-cyber-success pulse-fast"></span><span>ENCLAVE: <span class="text-cyber-success font-semibold">READY</span></span></div>
+    </div>
+    <div class="flex items-center gap-3">
+        <button id="btnRunAll" class="px-4 py-2 bg-gradient-to-r from-purple-500 to-cyan-500 hover:opacity-90 rounded-lg text-xs font-semibold tracking-wide flex items-center gap-2 transition-all shadow-md shadow-purple-500/20 active:scale-95">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            RUN BDD SUITE
+        </button>
+        <button id="btnExport" class="p-2 border border-cyber-border hover:bg-gray-800 rounded-lg text-gray-300 transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        </button>
+    </div>
+</header>
+
+<main class="max-w-[1600px] mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
+
+    <!-- LEFT: Summary & Stats -->
+    <section class="lg:col-span-4 flex flex-col gap-5">
+
+        <!-- Summary gauge -->
+        <div class="glass p-5 rounded-xl">
+            <h3 class="text-xs font-bold font-mono text-gray-300 uppercase tracking-widest mb-4">Suite Overview</h3>
+            <div class="flex items-center gap-4 mb-5">
+                <div class="relative w-24 h-24 flex-shrink-0">
+                    <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                        <path class="text-gray-800" stroke-width="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                        <path id="bddArc" class="text-purple-400 transition-all duration-700 ease-out" stroke-dasharray="0, 100" stroke-width="3" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                    </svg>
+                    <div class="absolute inset-0 flex flex-col items-center justify-center">
+                        <span class="text-xl font-bold font-mono text-purple-400" id="bddPct">0%</span>
+                        <span class="text-[9px] font-mono text-gray-500">complete</span>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-2 text-[11px] font-mono">
+                    <div class="flex items-center gap-2"><div class="w-2.5 h-2.5 rounded-full bg-emerald-400"></div><span class="text-gray-400">Passed: <span class="text-emerald-400 font-bold" id="sumPass">0</span></span></div>
+                    <div class="flex items-center gap-2"><div class="w-2.5 h-2.5 rounded-full bg-red-400"></div><span class="text-gray-400">Failed: <span class="text-red-400 font-bold" id="sumFail">0</span></span></div>
+                    <div class="flex items-center gap-2"><div class="w-2.5 h-2.5 rounded-full bg-gray-600"></div><span class="text-gray-400">Pending: <span class="text-gray-300 font-bold" id="sumPending">18</span></span></div>
+                    <div class="flex items-center gap-2"><div class="w-2.5 h-2.5 rounded-full bg-purple-400"></div><span class="text-gray-400">Steps: <span class="text-purple-300 font-bold" id="sumSteps">0</span> / 72</span></div>
+                    <div class="flex items-center gap-2"><div class="w-2.5 h-2.5 rounded-full bg-cyan-400"></div><span class="text-gray-400">Duration: <span class="text-cyan-300 font-bold" id="sumDur">0ms</span></span></div>
+                </div>
+            </div>
+
+            <!-- Feature summary -->
+            <div class="space-y-1.5 text-[11px] font-mono">
+                <div class="flex items-center justify-between"><span class="text-gray-500">Feature: LinearAutoDestroy</span><span id="fs-lad" class="text-gray-600 font-bold">—</span></div>
+                <div class="flex items-center justify-between"><span class="text-gray-500">Feature: Sealed State</span><span id="fs-sealed" class="text-gray-600 font-bold">—</span></div>
+                <div class="flex items-center justify-between"><span class="text-gray-500">Feature: MIASMA WORM</span><span id="fs-miasma" class="text-gray-600 font-bold">—</span></div>
+                <div class="flex items-center justify-between"><span class="text-gray-500">Feature: Supply Chain</span><span id="fs-supply" class="text-gray-600 font-bold">—</span></div>
+                <div class="flex items-center justify-between"><span class="text-gray-500">Feature: Rollback</span><span id="fs-rollback" class="text-gray-600 font-bold">—</span></div>
+                <div class="flex items-center justify-between"><span class="text-gray-500">Feature: Envelope Enc.</span><span id="fs-envelope" class="text-gray-600 font-bold">—</span></div>
+            </div>
+        </div>
+
+        <!-- Step type legend -->
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-xs font-bold font-mono text-gray-300 uppercase tracking-widest mb-3">Gherkin Legend</h3>
+            <div class="space-y-2 text-[11px] font-mono">
+                <div class="flex items-center gap-2"><div class="w-8 h-1 rounded" style="background:#6366f1"></div><span class="text-gray-400"><span class="text-indigo-400 font-bold">Given</span> — estado inicial / pré-condição</span></div>
+                <div class="flex items-center gap-2"><div class="w-8 h-1 rounded" style="background:#06b6d4"></div><span class="text-gray-400"><span class="text-cyan-400 font-bold">When</span> — ação / evento disparado</span></div>
+                <div class="flex items-center gap-2"><div class="w-8 h-1 rounded" style="background:#10b981"></div><span class="text-gray-400"><span class="text-emerald-400 font-bold">Then</span> — resultado esperado</span></div>
+                <div class="flex items-center gap-2"><div class="w-8 h-1 rounded" style="background:#a855f7"></div><span class="text-gray-400"><span class="text-purple-400 font-bold">And</span> — condição adicional</span></div>
+            </div>
+        </div>
+
+        <!-- Speed control -->
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-xs font-bold font-mono text-gray-300 uppercase tracking-widest mb-3">Execution Speed</h3>
+            <div class="flex gap-2">
+                <button id="speedSlow" class="flex-1 px-2 py-2 border border-cyber-border text-gray-400 rounded text-[11px] font-mono transition-all hover:border-purple-500/30">SLOW</button>
+                <button id="speedNorm" class="flex-1 px-2 py-2 bg-purple-500/20 border border-purple-500/30 text-purple-400 rounded text-[11px] font-mono font-bold transition-all">NORM</button>
+                <button id="speedFast" class="flex-1 px-2 py-2 border border-cyber-border text-gray-400 rounded text-[11px] font-mono transition-all hover:border-purple-500/30">FAST</button>
+            </div>
+        </div>
+
+        <!-- Terminal -->
+        <div class="glass rounded-xl overflow-hidden flex flex-col flex-1 min-h-48 border border-cyber-border">
+            <div class="bg-gray-900 px-4 py-2 border-b border-cyber-border flex items-center justify-between text-xs font-mono">
+                <span class="text-gray-300 flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-purple-400 pulse-fast"></span>BDD RUNNER LOG</span>
+                <button id="btnClearLogs" class="text-gray-400 hover:text-white">CLEAR</button>
+            </div>
+            <div id="terminalBody" class="flex-grow p-3 bg-black/90 font-mono text-[10px] leading-relaxed overflow-y-auto terminal-scroll text-purple-300">
+                <div class="text-gray-500">[BDD] Suite inicializada. 6 Features, 18 Scenarios, ~72 Steps.</div>
+                <div class="text-gray-500">[BDD] Gherkin parser pronto. Execute para iniciar.</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- RIGHT: Feature/Scenario runner -->
+    <section class="lg:col-span-8 flex flex-col gap-5 overflow-y-auto max-h-[calc(100vh-100px)] terminal-scroll pr-1">
+
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold text-gray-200 tracking-wide uppercase flex items-center gap-2 font-sans">
+                <svg class="w-5 h-5 text-purple-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                Features & Scenarios
+            </h2>
+            <span class="text-[11px] font-mono text-gray-400">Cucumber/Gherkin — LSES behaviors</span>
+        </div>
+
+        <div id="featureList">
+            <!-- Filled by JS -->
+        </div>
+    </section>
+</main>
+
+<footer class="mt-8 border-t border-cyber-border p-4 text-center text-xs text-gray-500 font-mono glass">
+    BDD Vault &copy; 2026 | LSES Behavior-Driven Test Suite
+</footer>
+
+<script>
+const features = [
+    {
+        id: 'lad',
+        title: 'LinearAutoDestroy (LAD) Handle Semantics',
+        desc: 'Garante que handles são single-use, TTL-bounded e que secureZero() é chamado ao consumir.',
+        tag: 'Security',
+        scenarios: [
+            {
+                id: 'lad_single_use',
+                name: 'Handle de uso único',
+                steps: [
+                    { kw: 'Given', text: 'um LinearAutoDestroy handle criado com secret="API_KEY_XYZ" e TTL=60s' },
+                    { kw: 'When', text: 'handle.consume() é chamado pela primeira vez' },
+                    { kw: 'Then', text: 'retorna Ok("API_KEY_XYZ")' },
+                    { kw: 'When', text: 'handle.consume() é chamado pela segunda vez' },
+                    { kw: 'Then', text: 'retorna LsesError.HandleConsumed' },
+                    { kw: 'And', text: 'secureZero() foi chamado sobre a memória do segredo' }
+                ]
+            },
+            {
+                id: 'lad_ttl_expire',
+                name: 'Handle expira após TTL',
+                steps: [
+                    { kw: 'Given', text: 'um handle criado com TTL=100ms' },
+                    { kw: 'And', text: 'o tempo avança 150ms via mock clock' },
+                    { kw: 'When', text: 'handle.consume() é chamado' },
+                    { kw: 'Then', text: 'retorna LsesError.HandleExpired' },
+                    { kw: 'And', text: 'secureZero() foi chamado preventivamente na expiração' }
+                ]
+            },
+            {
+                id: 'lad_no_plaintext',
+                name: 'Sem plaintext residual em RAM',
+                steps: [
+                    { kw: 'Given', text: 'um handle consumido com sucesso' },
+                    { kw: 'When', text: 'um scan de memória é executado no heap após consume()' },
+                    { kw: 'Then', text: 'nenhuma ocorrência do valor do segredo é encontrada' },
+                    { kw: 'And', text: 'a região de memória contém apenas bytes 0x00' }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'sealed',
+        title: 'Sealed State — Geração e Persistência Segura',
+        desc: 'KEK, ENCLAVE_SEED e CONSUMER_SEED são gerados via CSPRNG dentro do processo e selados com AES-256-GCM + machine binding.',
+        tag: 'Cryptography',
+        scenarios: [
+            {
+                id: 'sealed_bootstrap',
+                name: 'Bootstrap gera e sela chaves com sucesso',
+                steps: [
+                    { kw: 'Given', text: 'o sistema não possui sealed_state.bin' },
+                    { kw: 'And', text: 'bootstrap_main é executado' },
+                    { kw: 'When', text: 'std.crypto.random.bytes() gera 96 bytes (KEK+ENCLAVE_SEED+CONSUMER_SEED)' },
+                    { kw: 'Then', text: 'sealed_state.bin é criado com 124 bytes (12 nonce + 96 ct + 16 tag)' },
+                    { kw: 'And', text: 'permissão do arquivo é 0600' },
+                    { kw: 'And', text: 'o único output no stdout é a chave pública Ed25519 (hex 64 chars)' }
+                ]
+            },
+            {
+                id: 'sealed_unseal_valid',
+                name: 'Unseal retorna material correto na mesma máquina',
+                steps: [
+                    { kw: 'Given', text: 'sealed_state.bin existe gerado nesta máquina' },
+                    { kw: 'When', text: 'unsealKeys() é chamado com machineBindingKey() desta máquina' },
+                    { kw: 'Then', text: 'retorna SealedKeys com kek[32], enclave_seed[32], consumer_seed[32]' },
+                    { kw: 'And', text: 'sk.deinit() zera os 96 bytes com secureZero()' }
+                ]
+            },
+            {
+                id: 'sealed_tamper',
+                name: 'Blob adulterado é rejeitado',
+                steps: [
+                    { kw: 'Given', text: 'sealed_state.bin com byte[20] XOR 0xFF (adulterado)' },
+                    { kw: 'When', text: 'unsealKeys() tenta descriptografar' },
+                    { kw: 'Then', text: 'AES-256-GCM retorna AuthenticationFailed' },
+                    { kw: 'And', text: 'nenhum byte de plaintext é exposto antes da falha' }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'miasma',
+        title: 'MIASMA WORM — Anti-Impersonation de Agentes IA',
+        desc: 'Scoped signatures vinculam cada instrução a (signer, recipient, operation, session). Forwarding por worm é detectado.',
+        tag: 'AI Security',
+        scenarios: [
+            {
+                id: 'miasma_forward_rejected',
+                name: 'Instrução encaminhada pelo worm é rejeitada',
+                steps: [
+                    { kw: 'Given', text: 'agent-A assina instrução com noise_sign_scoped_payload(op="TRANSFER", recipient=agent-B)' },
+                    { kw: 'And', text: 'MIASMA WORM captura a instrução assinada' },
+                    { kw: 'When', text: 'worm re-envia a mesma assinatura para agent-C (destinatário diferente)' },
+                    { kw: 'Then', text: 'agent-C rejeita com LsesError.InvalidSignature' },
+                    { kw: 'And', text: 'o log registra "recipient_pk mismatch" no escopo da assinatura' }
+                ]
+            },
+            {
+                id: 'miasma_correct_recipient',
+                name: 'Instrução para destinatário correto é aceita',
+                steps: [
+                    { kw: 'Given', text: 'agent-A assina instrução com recipient=agent-B' },
+                    { kw: 'When', text: 'agent-B verifica a assinatura escopada' },
+                    { kw: 'Then', text: 'retorna Ok(()) — operação autorizada' },
+                    { kw: 'And', text: 'o binding DOMAIN + session_id + SHA256(payload) corresponde' }
+                ]
+            },
+            {
+                id: 'miasma_challenge_response',
+                name: 'Challenge-response prova posse de chave privada',
+                steps: [
+                    { kw: 'Given', text: 'consumer envia challenge = random[32]' },
+                    { kw: 'When', text: 'enclave assina (DOMAIN ‖ challenge ‖ pub_key ‖ mac ‖ ip)' },
+                    { kw: 'Then', text: 'consumer verifica com Ed25519 verify_strict()' },
+                    { kw: 'And', text: 'a posse da chave privada é provada sem expô-la' },
+                    { kw: 'And', text: 'replay do mesmo response com challenge diferente falha' }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'supply',
+        title: 'Supply Chain Integrity — TrustedKeyRegistry',
+        desc: 'Apenas enclaves com chave pública registrada no TrustedKeyRegistry podem emitir snapshots aceitos.',
+        tag: 'Supply Chain',
+        scenarios: [
+            {
+                id: 'supply_untrusted_key',
+                name: 'Enclave não registrado é rejeitado',
+                steps: [
+                    { kw: 'Given', text: 'TrustedKeyRegistry contém apenas {key_A, key_B}' },
+                    { kw: 'And', text: 'um snapshot é assinado por key_C (não registrada)' },
+                    { kw: 'When', text: 'verifySnapshot() executa step 9.5 (key registry check)' },
+                    { kw: 'Then', text: 'retorna LsesError.UntrustedEnclave' },
+                    { kw: 'And', text: 'zero operações de decrypt são realizadas antes da rejeição' }
+                ]
+            },
+            {
+                id: 'supply_trusted_key',
+                name: 'Enclave registrado tem snapshot aceito',
+                steps: [
+                    { kw: 'Given', text: 'TrustedKeyRegistry contém key_A' },
+                    { kw: 'And', text: 'snapshot assinado por key_A com countersig válido do consumer' },
+                    { kw: 'When', text: 'verifySnapshot() executa os 10 steps de verificação' },
+                    { kw: 'Then', text: 'retorna Ok(decrypted_payload)' },
+                    { kw: 'And', text: 'DEK é destruído via secureZero() imediatamente após decrypt' }
+                ]
+            },
+            {
+                id: 'supply_cargo_deny',
+                name: 'cargo-deny bloqueia dependências não permitidas',
+                steps: [
+                    { kw: 'Given', text: 'deny.toml com lista de licenças permitidas (MIT, Apache-2.0, ISC)' },
+                    { kw: 'And', text: 'Cargo.lock com dependência hipotética "evil-crate 0.1.0" (GPL-3.0)' },
+                    { kw: 'When', text: 'cargo deny check é executado no CI' },
+                    { kw: 'Then', text: 'build falha com "license not allowed: GPL-3.0"' },
+                    { kw: 'And', text: 'nenhum artefato é gerado' }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'rollback',
+        title: 'Rollback Prevention — Epoch Chain Monotônica',
+        desc: 'Cada snapshot avança last_accepted_epoch. Tentativas de replay com epoch antigo são bloqueadas.',
+        tag: 'Anti-Rollback',
+        scenarios: [
+            {
+                id: 'rollback_old_epoch',
+                name: 'Snapshot com epoch antigo é bloqueado',
+                steps: [
+                    { kw: 'Given', text: 'último epoch aceito = 100' },
+                    { kw: 'When', text: 'snapshot com epoch = 99 é submetido' },
+                    { kw: 'Then', text: 'retorna LsesError.RollbackDetected' },
+                    { kw: 'And', text: 'nenhuma operação de decrypt é executada' }
+                ]
+            },
+            {
+                id: 'rollback_same_epoch',
+                name: 'Snapshot com mesmo epoch é bloqueado',
+                steps: [
+                    { kw: 'Given', text: 'último epoch aceito = 100' },
+                    { kw: 'When', text: 'snapshot com epoch = 100 é submetido novamente' },
+                    { kw: 'Then', text: 'retorna LsesError.RollbackDetected (não permite replay de mesmo epoch)' }
+                ]
+            },
+            {
+                id: 'rollback_valid_advance',
+                name: 'Epoch avançado é aceito',
+                steps: [
+                    { kw: 'Given', text: 'último epoch aceito = 100' },
+                    { kw: 'And', text: 'snapshot com epoch = 101 e previous_hash = SHA256(snapshot_100)' },
+                    { kw: 'When', text: 'verifySnapshot() valida chain link' },
+                    { kw: 'Then', text: 'retorna Ok(payload)' },
+                    { kw: 'And', text: 'last_accepted_epoch é atualizado para 101' }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'envelope',
+        title: 'Envelope Encryption — Two-Level DEK/KEK',
+        desc: 'Payload cifrado com DEK efêmero; DEK cifrado com KEK. Mesmo canonical_aad para ambos (CVE-LSES-012).',
+        tag: 'Cryptography',
+        scenarios: [
+            {
+                id: 'envelope_same_aad',
+                name: 'AAD idêntico em DEK wrap e payload seal',
+                steps: [
+                    { kw: 'Given', text: 'snapshot_id = "snap-abc" e domain = "prod"' },
+                    { kw: 'When', text: 'sealSnapshot() executa DEK wrap com canonical_aad' },
+                    { kw: 'And', text: 'em seguida sela o payload com o mesmo canonical_aad' },
+                    { kw: 'Then', text: 'os bytes de AAD são bit-a-bit idênticos nas duas chamadas AES-GCM' }
+                ]
+            },
+            {
+                id: 'envelope_dek_ephemeral',
+                name: 'DEK é destruído após uso',
+                steps: [
+                    { kw: 'Given', text: 'DEK gerado via CSPRNG para cifrar o payload' },
+                    { kw: 'When', text: 'o payload é cifrado e o DEK é wrappado no KEK' },
+                    { kw: 'Then', text: 'secureZero() é chamado sobre o DEK plaintext imediatamente' },
+                    { kw: 'And', text: 'nenhuma cópia do DEK persiste em qualquer variável' }
+                ]
+            },
+            {
+                id: 'envelope_wrong_aad',
+                name: 'AAD incorreto na verificação falha a autenticação',
+                steps: [
+                    { kw: 'Given', text: 'envelope selado com aad = "prod"' },
+                    { kw: 'When', text: 'unseal tenta usar aad = "staging" (diferente)' },
+                    { kw: 'Then', text: 'AES-GCM retorna AuthenticationFailed' },
+                    { kw: 'And', text: 'nenhum byte de plaintext do payload é exposto' }
+                ]
+            }
+        ]
+    }
+];
+
+let simSpeed = 1200, isRunning = false;
+let passCount = 0, failCount = 0, pendingCount = 18, stepsDone = 0;
+const TOTAL_STEPS = features.reduce((a, f) => a + f.scenarios.reduce((b, s) => b + s.steps.length, 0), 0);
+const TOTAL_SCENARIOS = features.reduce((a, f) => a + f.scenarios.length, 0);
+let results = [];
+
+const terminalBody = document.getElementById('terminalBody');
+const featureList = document.getElementById('featureList');
+
+function log(msg, type = 'info') {
+    const time = new Date().toLocaleTimeString();
+    const map = { info: 'text-gray-400', pass: 'text-emerald-400 font-bold', fail: 'text-red-400 font-bold', run: 'text-purple-300 font-semibold', step: 'text-cyan-300', feature: 'text-purple-400 font-bold' };
+    const el = document.createElement('div');
+    el.innerHTML = `<span class="text-gray-600">[${time}]</span> <span class="${map[type]||'text-gray-400'}">${msg}</span>`;
+    terminalBody.appendChild(el);
+    terminalBody.scrollTop = terminalBody.scrollHeight;
+}
+
+function kwColor(kw) {
+    const map = { Given: 'text-indigo-400', When: 'text-cyan-400', Then: 'text-emerald-400', And: 'text-purple-400' };
+    return map[kw] || 'text-gray-400';
+}
+function kwBorder(kw) {
+    const map = { Given: 'step-given', When: 'step-when', Then: 'step-then', And: 'step-and' };
+    return map[kw] || '';
+}
+
+function renderFeatures() {
+    featureList.innerHTML = '';
+    features.forEach(f => {
+        const el = document.createElement('div');
+        el.id = `feature-${f.id}`;
+        el.className = 'glass feature-block rounded-xl overflow-hidden mb-4';
+        el.innerHTML = `
+            <div class="px-4 py-3 flex items-center justify-between border-b border-cyber-border/40 bg-gray-900/30 cursor-pointer feature-header" data-fid="${f.id}">
+                <div class="flex items-center gap-3">
+                    <span class="text-[10px] bg-purple-950/50 border border-purple-500/20 text-purple-400 font-bold px-2 py-0.5 rounded font-mono uppercase">${f.tag}</span>
+                    <div>
+                        <div class="text-sm font-semibold text-gray-100">Feature: ${f.title}</div>
+                        <div class="text-[11px] text-gray-400 mt-0.5">${f.desc}</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 flex-shrink-0">
+                    <span id="fs-count-${f.id}" class="text-[11px] font-mono text-gray-500">${f.scenarios.length} scenarios</span>
+                    <span id="fs-status-${f.id}" class="text-[10px] px-2 py-0.5 rounded font-mono font-bold border bg-gray-900/60 text-gray-500 border-gray-700">PENDING</span>
+                </div>
+            </div>
+            <div id="feature-body-${f.id}" class="p-3 space-y-3">
+                ${f.scenarios.map(s => `
+                    <div id="sc-${s.id}" class="rounded-lg border border-cyber-border/40 scenario-pending overflow-hidden transition-all duration-300 cursor-pointer hover:border-purple-500/20" data-sid="${s.id}">
+                        <div class="flex items-center justify-between px-3 py-2 bg-gray-900/40 scenario-header" data-sid="${s.id}">
+                            <div class="flex items-center gap-2">
+                                <span id="sc-icon-${s.id}" class="text-gray-600">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/></svg>
+                                </span>
+                                <span class="text-[12px] font-semibold text-gray-200">Scenario: ${s.name}</span>
+                            </div>
+                            <span id="sc-badge-${s.id}" class="text-[10px] px-2 py-0.5 rounded font-mono font-bold border bg-gray-900/60 text-gray-500 border-gray-700">PENDING</span>
+                        </div>
+                        <div id="sc-steps-${s.id}" class="px-3 pt-1 pb-2 space-y-1">
+                            ${s.steps.map((step, i) => `
+                                <div id="step-${s.id}-${i}" class="flex items-start gap-2 rounded px-2 py-1 ${kwBorder(step.kw)} transition-all duration-200">
+                                    <span id="step-icon-${s.id}-${i}" class="step-icon text-gray-600 mt-0.5 flex-shrink-0">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" stroke-width="2"/></svg>
+                                    </span>
+                                    <span class="text-[11px] font-mono"><span class="${kwColor(step.kw)} font-bold">${step.kw}</span> <span class="text-gray-300">${step.text}</span></span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        featureList.appendChild(el);
+    });
+
+    // Click handlers
+    document.querySelectorAll('.scenario-header').forEach(h => {
+        h.addEventListener('click', () => { if (!isRunning) runScenario(h.dataset.sid); });
+    });
+}
+
+function updateSummary() {
+    const pct = Math.round((passCount / TOTAL_SCENARIOS) * 100);
+    document.getElementById('bddPct').textContent = `${pct}%`;
+    document.getElementById('bddArc').setAttribute('stroke-dasharray', `${pct}, 100`);
+    document.getElementById('sumPass').textContent = passCount;
+    document.getElementById('sumFail').textContent = failCount;
+    document.getElementById('sumPending').textContent = pendingCount;
+    document.getElementById('sumSteps').textContent = stepsDone;
+    document.getElementById('hdrScenarios').textContent = passCount;
+}
+
+function setStepState(scenarioId, stepIdx, state) {
+    const stepEl = document.getElementById(`step-${scenarioId}-${stepIdx}`);
+    const iconEl = document.getElementById(`step-icon-${scenarioId}-${stepIdx}`);
+    if (!stepEl || !iconEl) return;
+    if (state === 'running') {
+        stepEl.classList.add('step-running');
+        iconEl.innerHTML = '<svg class="w-3 h-3 text-amber-400 animate-spin" style="animation-duration:0.8s" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>';
+    } else if (state === 'pass') {
+        stepEl.classList.remove('step-running');
+        iconEl.innerHTML = '<svg class="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>';
+    } else if (state === 'fail') {
+        stepEl.classList.remove('step-running');
+        iconEl.innerHTML = '<svg class="w-3 h-3 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
+    }
+}
+
+function setScenarioState(sid, state) {
+    const scEl = document.getElementById(`sc-${sid}`);
+    const badge = document.getElementById(`sc-badge-${sid}`);
+    const icon = document.getElementById(`sc-icon-${sid}`);
+    if (!scEl) return;
+    scEl.className = `rounded-lg border border-cyber-border/40 scenario-${state} overflow-hidden transition-all duration-300`;
+    if (state === 'running') {
+        badge.className = 'text-[10px] px-2 py-0.5 rounded font-mono font-bold border bg-amber-950/40 text-amber-400 border-amber-500/20';
+        badge.textContent = 'RUNNING';
+        icon.innerHTML = '<svg class="w-3.5 h-3.5 text-amber-400 animate-spin" style="animation-duration:1s" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>';
+    } else if (state === 'pass') {
+        badge.className = 'text-[10px] px-2 py-0.5 rounded font-mono font-bold border bg-emerald-950/40 text-emerald-400 border-emerald-500/20';
+        badge.textContent = 'PASS';
+        icon.innerHTML = '<svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+    } else if (state === 'fail') {
+        badge.className = 'text-[10px] px-2 py-0.5 rounded font-mono font-bold border bg-red-950/40 text-red-400 border-red-500/20';
+        badge.textContent = 'FAIL';
+        icon.innerHTML = '<svg class="w-3.5 h-3.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+    }
+}
+
+function setFeatureState(fid, state) {
+    const badge = document.getElementById(`fs-status-${fid}`);
+    if (!badge) return;
+    if (state === 'pass') { badge.className = 'text-[10px] px-2 py-0.5 rounded font-mono font-bold border bg-emerald-950/40 text-emerald-400 border-emerald-500/20'; badge.textContent = 'PASS'; }
+    else if (state === 'partial') { badge.className = 'text-[10px] px-2 py-0.5 rounded font-mono font-bold border bg-amber-950/40 text-amber-400 border-amber-500/20'; badge.textContent = 'PARTIAL'; }
+    else if (state === 'running') { badge.className = 'text-[10px] px-2 py-0.5 rounded font-mono font-bold border bg-purple-950/40 text-purple-400 border-purple-500/20 pulse-fast'; badge.textContent = 'RUNNING'; }
+
+    // Update left-panel feature status
+    const fsEl = document.getElementById(`fs-${fid}`);
+    if (fsEl) {
+        if (state === 'pass') { fsEl.textContent = '✓ PASS'; fsEl.className = 'text-emerald-400 font-bold text-[11px] font-mono'; }
+        else if (state === 'running') { fsEl.textContent = '⟳ RUNNING'; fsEl.className = 'text-purple-400 font-bold text-[11px] font-mono pulse-fast'; }
+    }
+}
+
+async function runScenario(sid) {
+    const feature = features.find(f => f.scenarios.find(s => s.id === sid));
+    const scenario = feature?.scenarios.find(s => s.id === sid);
+    if (!scenario) return;
+
+    setScenarioState(sid, 'running');
+    log(`  Scenario: ${scenario.name}`, 'run');
+
+    for (let i = 0; i < scenario.steps.length; i++) {
+        const step = scenario.steps[i];
+        setStepState(sid, i, 'running');
+        await new Promise(r => setTimeout(r, simSpeed / scenario.steps.length * 0.8 + 60));
+        setStepState(sid, i, 'pass');
+        log(`    ${step.kw} ${step.text}`, 'step');
+        stepsDone++;
+    }
+
+    setScenarioState(sid, 'pass');
+    passCount++;
+    pendingCount = Math.max(0, pendingCount - 1);
+    log(`  ✓ Scenario passou em ${scenario.steps.length} steps`, 'pass');
+    results.push({ scenario: scenario.name, feature: feature.title, steps: scenario.steps.length, state: 'pass', timestamp: new Date().toISOString() });
+    updateSummary();
+}
+
+async function runFeature(feature) {
+    setFeatureState(feature.id, 'running');
+    log(`\nFeature: ${feature.title}`, 'feature');
+    for (const sc of feature.scenarios) {
+        document.getElementById(`sc-${sc.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        await runScenario(sc.id);
+        await new Promise(r => setTimeout(r, 300));
+    }
+    setFeatureState(feature.id, 'pass');
+}
+
+async function runAll() {
+    if (isRunning) return;
+    isRunning = true;
+    btnRunAll.disabled = true;
+    btnRunAll.classList.add('opacity-50', 'cursor-not-allowed');
+    passCount = failCount = 0; pendingCount = TOTAL_SCENARIOS; stepsDone = 0; results = [];
+    const startTime = Date.now();
+    log('[BDD SUITE] Iniciando 6 Features, 18 Scenarios...', 'info');
+    for (const f of features) { await runFeature(f); await new Promise(r => setTimeout(r, 400)); }
+    const elapsed = Date.now() - startTime;
+    document.getElementById('sumDur').textContent = `${elapsed}ms`;
+    log(`\n🎉 [BDD COMPLETE] ${passCount}/${TOTAL_SCENARIOS} scenarios | ${stepsDone}/${TOTAL_STEPS} steps | ${elapsed}ms`, 'pass');
+    isRunning = false;
+    btnRunAll.disabled = false;
+    btnRunAll.classList.remove('opacity-50', 'cursor-not-allowed');
+}
+
+btnRunAll.addEventListener('click', runAll);
+document.getElementById('btnClearLogs').addEventListener('click', () => { terminalBody.innerHTML = '<div class="text-gray-500">[BDD] Log limpo.</div>'; });
+document.getElementById('speedSlow').addEventListener('click', () => simSpeed = 2500);
+document.getElementById('speedNorm').addEventListener('click', () => simSpeed = 1200);
+document.getElementById('speedFast').addEventListener('click', () => simSpeed = 350);
+document.getElementById('btnExport').addEventListener('click', () => {
+    if (!results.length) return alert('Execute cenários primeiro.');
+    const a = document.createElement('a');
+    a.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ title: 'LSES BDD Report', timestamp: new Date().toISOString(), pass: passCount, results }, null, 2));
+    a.download = `bdd_report_${Date.now()}.json`;
+    a.click();
+});
+
+renderFeatures();
+</script>
+</body>
+</html>

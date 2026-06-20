@@ -1,0 +1,13 @@
+{
+  "id": "stress",
+  "name": "Stress & Load",
+  "type": "stress",
+  "lang": ["zig", "rust"],
+  "color": "#f43f5e",
+  "description": "High-throughput seal/unseal, NonceRegistry flood, BPF XDP packet burst",
+  "command": null,
+  "executable": false,
+  "tiers": ["low", "med", "high"],
+  "scenarios": 7,
+  "binary": null
+}

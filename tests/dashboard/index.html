@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LSES Test Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = { darkMode: 'class', theme: { extend: { fontFamily: { sans: ['Outfit','sans-serif'], mono: ['JetBrains Mono','monospace'] } } } }</script>
+<style>
+  body { background:#030712; background-image: radial-gradient(at 0% 0%,rgba(6,182,212,.06) 0,transparent 50%),radial-gradient(at 100% 0%,rgba(139,92,246,.05) 0,transparent 50%),radial-gradient(at 50% 100%,rgba(16,185,129,.03) 0,transparent 50%); background-attachment:fixed; }
+
+  .glass    { backdrop-filter:blur(20px) saturate(160%); background:rgba(3,7,18,.82); border:1px solid rgba(255,255,255,.07); }
+  .glass-sm { backdrop-filter:blur(12px); background:rgba(11,17,33,.6); border:1px solid rgba(255,255,255,.07); }
+
+  /* fixed nav */
+  .top-nav { position:fixed; top:0; left:0; right:0; z-index:50; backdrop-filter:blur(24px) saturate(180%); background:rgba(3,7,18,.88); border-bottom:1px solid rgba(255,255,255,.06); }
+
+  .nav-link { padding:.35rem .75rem; border-radius:.5rem; font-size:.7rem; font-weight:600; letter-spacing:.06em; color:#9ca3af; transition:all .15s; font-family:'JetBrains Mono',monospace; }
+  .nav-link:hover { color:#e5e7eb; background:rgba(255,255,255,.06); }
+  .nav-link.here  { color:#06b6d4; background:rgba(6,182,212,.1); }
+
+  /* suite cards */
+  .suite-card { border-radius:1rem; padding:1.25rem; transition:transform .15s,box-shadow .15s; cursor:default; }
+  .suite-card:hover { transform:translateY(-2px); }
+
+  /* language badges */
+  .lang-badge { font-size:.6rem; font-family:'JetBrains Mono',monospace; padding:.15rem .4rem; border-radius:.3rem; border:1px solid; font-weight:600; letter-spacing:.04em; }
+
+  /* SSE terminal */
+  .terminal { font-family:'JetBrains Mono',monospace; font-size:.7rem; line-height:1.6; }
+  .terminal::-webkit-scrollbar { width:5px; }
+  .terminal::-webkit-scrollbar-track { background:transparent; }
+  .terminal::-webkit-scrollbar-thumb { background:rgba(255,255,255,.12); border-radius:3px; }
+
+  .sse-dot { width:.5rem; height:.5rem; border-radius:50%; display:inline-block; }
+
+  @keyframes pulse-sse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  .sse-live { animation:pulse-sse 1.4s ease-in-out infinite; background:#10b981; box-shadow:0 0 6px #10b981; }
+  .sse-off  { background:#6b7280; }
+
+  /* result status colors */
+  .status-pass    { color:#10b981; }
+  .status-fail    { color:#f43f5e; }
+  .status-pending { color:#6b7280; }
+  .status-running { color:#fbbf24; }
+
+  /* terminal line kinds */
+  .tl-feature  { color:#c084fc; }
+  .tl-rule     { color:#67e8f9; }
+  .tl-scenario { color:#fcd34d; }
+  .tl-step     { color:#86efac; }
+  .tl-log      { color:#6b7280; }
+  .tl-start    { color:#38bdf8; }
+  .tl-done     { color:#10b981; }
+  .tl-error    { color:#f43f5e; }
+  .tl-warn     { color:#fb923c; }
+</style>
+</head>
+<body class="text-gray-100 min-h-screen font-sans">
+
+<!-- ── Fixed Nav ─────────────────────────────────────────────────────── -->
+<nav class="top-nav">
+  <div class="max-w-[1400px] mx-auto px-6 h-14 flex items-center gap-6">
+
+    <!-- Logo -->
+    <a href="/" class="flex items-center gap-2.5 shrink-0 mr-2">
+      <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-500 to-violet-500 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+        <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+      </div>
+      <span class="font-bold text-sm tracking-wide">LSES <span class="text-cyan-400">TESTS</span></span>
+    </a>
+
+    <!-- Nav links -->
+    <div class="flex items-center gap-1">
+      <a href="/" class="nav-link here">Dashboard</a>
+      <a href="/stress" class="nav-link">Stress</a>
+      <a href="/unit"   class="nav-link">Unit</a>
+      <a href="/bdd"    class="nav-link">BDD</a>
+      <a href="/synk"   class="nav-link">Sync</a>
+      <a href="/chaos"  class="nav-link">Chaos</a>
+    </div>
+
+    <div class="ml-auto flex items-center gap-4">
+      <!-- SSE status -->
+      <div class="flex items-center gap-2 text-xs font-mono">
+        <span id="sseDot" class="sse-dot sse-off"></span>
+        <span id="sseLabel" class="text-gray-400">SSE: disconnected</span>
+      </div>
+      <!-- Current time -->
+      <span id="clock" class="text-[11px] font-mono text-gray-600"></span>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Main ───────────────────────────────────────────────────────────── -->
+<main class="max-w-[1400px] mx-auto px-6 pt-20 pb-12">
+
+  <!-- Header -->
+  <div class="mb-8">
+    <h1 class="text-2xl font-bold tracking-tight">Test <span class="bg-gradient-to-r from-cyan-400 to-violet-400 bg-clip-text text-transparent">Dashboard</span></h1>
+    <p class="text-sm text-gray-400 mt-1 font-mono">Linus Salamander Enclave System · v0.1.0</p>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="grid grid-cols-4 gap-3 mb-8">
+    <div class="glass-sm rounded-xl p-4">
+      <div class="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-1">Total Suites</div>
+      <div class="text-2xl font-bold">5</div>
+    </div>
+    <div class="glass-sm rounded-xl p-4">
+      <div class="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-1">Executáveis</div>
+      <div class="text-2xl font-bold text-violet-400">1</div>
+    </div>
+    <div class="glass-sm rounded-xl p-4">
+      <div class="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-1">SSE Clients</div>
+      <div class="text-2xl font-bold text-cyan-400" id="statClients">1</div>
+    </div>
+    <div class="glass-sm rounded-xl p-4">
+      <div class="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-1">Ativo</div>
+      <div class="text-sm font-bold font-mono text-amber-400" id="statActive">—</div>
+    </div>
+  </div>
+
+  <!-- Suite cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
+
+    <!-- Stress -->
+    <div class="suite-card glass-sm" data-suite="stress">
+      <div class="flex items-start justify-between mb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl flex items-center justify-center" style="background:rgba(244,63,94,.12);border:1px solid rgba(244,63,94,.2)">
+            <svg class="w-4.5 h-4.5" style="color:#f43f5e" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          </div>
+          <div>
+            <div class="font-semibold text-sm">Stress &amp; Load</div>
+            <div class="flex gap-1 mt-0.5">
+              <span class="lang-badge" style="color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.05)">zig</span>
+              <span class="lang-badge" style="color:#fb923c;border-color:rgba(251,146,60,.3);background:rgba(251,146,60,.05)">rust</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="suite-status w-2 h-2 rounded-full bg-gray-600"></span>
+        </div>
+      </div>
+      <p class="text-xs text-gray-400 mb-3 leading-relaxed">Seal/unseal throughput, NonceRegistry flood, BPF XDP packet burst — LOW / MED / HIGH tiers</p>
+      <div class="flex items-center justify-between">
+        <span class="suite-result text-xs text-gray-600 font-mono">pending</span>
+        <a href="/stress" class="text-[11px] font-mono px-3 py-1.5 rounded-lg transition-all" style="background:rgba(244,63,94,.1);color:#f43f5e;border:1px solid rgba(244,63,94,.2)">Open →</a>
+      </div>
+    </div>
+
+    <!-- Unit -->
+    <div class="suite-card glass-sm" data-suite="unit">
+      <div class="flex items-start justify-between mb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl flex items-center justify-center" style="background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.2)">
+            <svg class="w-4.5 h-4.5" style="color:#06b6d4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+          </div>
+          <div>
+            <div class="font-semibold text-sm">Unit Tests</div>
+            <div class="flex flex-wrap gap-1 mt-0.5">
+              <span class="lang-badge" style="color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.05)">zig</span>
+              <span class="lang-badge" style="color:#fb923c;border-color:rgba(251,146,60,.3);background:rgba(251,146,60,.05)">rust</span>
+              <span class="lang-badge" style="color:#4ade80;border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.05)">go</span>
+              <span class="lang-badge" style="color:#60a5fa;border-color:rgba(96,165,250,.3);background:rgba(96,165,250,.05)">py</span>
+              <span class="lang-badge" style="color:#a78bfa;border-color:rgba(167,139,250,.3);background:rgba(167,139,250,.05)">ts</span>
+            </div>
+          </div>
+        </div>
+        <span class="suite-status w-2 h-2 rounded-full bg-gray-600"></span>
+      </div>
+      <p class="text-xs text-gray-400 mb-3 leading-relaxed">22 testes isolados: canonicalAad, NonceRegistry, TrustedKeyRegistry, machineBindingKey, OWASP top-10</p>
+      <div class="flex items-center justify-between">
+        <span class="suite-result text-xs text-gray-600 font-mono">pending</span>
+        <a href="/unit" class="text-[11px] font-mono px-3 py-1.5 rounded-lg transition-all" style="background:rgba(6,182,212,.1);color:#06b6d4;border:1px solid rgba(6,182,212,.2)">Open →</a>
+      </div>
+    </div>
+
+    <!-- BDD — executável real -->
+    <div class="suite-card glass-sm" data-suite="bdd" style="border-color:rgba(139,92,246,.2)">
+      <div class="flex items-start justify-between mb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl flex items-center justify-center" style="background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.3)">
+            <svg class="w-4.5 h-4.5" style="color:#8b5cf6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          </div>
+          <div>
+            <div class="font-semibold text-sm flex items-center gap-1.5">BDD Gherkin <span class="text-[9px] bg-violet-500/20 text-violet-300 border border-violet-500/30 px-1.5 py-0.5 rounded font-mono">REAL EXE</span></div>
+            <div class="flex gap-1 mt-0.5">
+              <span class="lang-badge" style="color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.05)">zig</span>
+            </div>
+          </div>
+        </div>
+        <span class="suite-status w-2 h-2 rounded-full bg-gray-600"></span>
+      </div>
+      <p class="text-xs text-gray-400 mb-3 leading-relaxed">Comptime Gherkin parser — .feature parseado em compile-time, execução com semântica de erros nativa do Zig</p>
+      <div class="flex items-center justify-between">
+        <span class="suite-result text-xs text-gray-600 font-mono">pending</span>
+        <div class="flex items-center gap-2">
+          <button onclick="runSuite('bdd')" id="runBdd" class="text-[11px] font-mono px-3 py-1.5 rounded-lg transition-all active:scale-95" style="background:rgba(139,92,246,.15);color:#a78bfa;border:1px solid rgba(139,92,246,.3)">▶ Run</button>
+          <a href="/bdd" class="text-[11px] font-mono px-3 py-1.5 rounded-lg transition-all" style="background:rgba(139,92,246,.08);color:#8b5cf6;border:1px solid rgba(139,92,246,.2)">Open →</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sync -->
+    <div class="suite-card glass-sm" data-suite="synk">
+      <div class="flex items-start justify-between mb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl flex items-center justify-center" style="background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.2)">
+            <svg class="w-4.5 h-4.5" style="color:#6366f1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+          </div>
+          <div>
+            <div class="font-semibold text-sm">Sync &amp; Concurrency</div>
+            <div class="flex gap-1 mt-0.5">
+              <span class="lang-badge" style="color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.05)">zig</span>
+              <span class="lang-badge" style="color:#fb923c;border-color:rgba(251,146,60,.3);background:rgba(251,146,60,.05)">rust</span>
+            </div>
+          </div>
+        </div>
+        <span class="suite-status w-2 h-2 rounded-full bg-gray-600"></span>
+      </div>
+      <p class="text-xs text-gray-400 mb-3 leading-relaxed">8 cenários de contenção: NonceRegistry (32 threads), AtomicBool init guard (64 threads), BPF map races</p>
+      <div class="flex items-center justify-between">
+        <span class="suite-result text-xs text-gray-600 font-mono">pending</span>
+        <a href="/synk" class="text-[11px] font-mono px-3 py-1.5 rounded-lg transition-all" style="background:rgba(99,102,241,.1);color:#818cf8;border:1px solid rgba(99,102,241,.2)">Open →</a>
+      </div>
+    </div>
+
+    <!-- Chaos -->
+    <div class="suite-card glass-sm" data-suite="chaos">
+      <div class="flex items-start justify-between mb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl flex items-center justify-center" style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.2)">
+            <svg class="w-4.5 h-4.5" style="color:#f59e0b" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          </div>
+          <div>
+            <div class="font-semibold text-sm">Chaos Engineering</div>
+            <div class="flex gap-1 mt-0.5">
+              <span class="lang-badge" style="color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.05)">zig</span>
+              <span class="lang-badge" style="color:#fb923c;border-color:rgba(251,146,60,.3);background:rgba(251,146,60,.05)">rust</span>
+            </div>
+          </div>
+        </div>
+        <span class="suite-status w-2 h-2 rounded-full bg-gray-600"></span>
+      </div>
+      <p class="text-xs text-gray-400 mb-3 leading-relaxed">Injeção de falhas: chaves corrompidas, replay attacks, memory faults, rollback de epoch, attestation falsa</p>
+      <div class="flex items-center justify-between">
+        <span class="suite-result text-xs text-gray-600 font-mono">pending</span>
+        <a href="/chaos" class="text-[11px] font-mono px-3 py-1.5 rounded-lg transition-all" style="background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.2)">Open →</a>
+      </div>
+    </div>
+
+    <!-- Info card: BDD framework -->
+    <div class="suite-card glass-sm" style="border-color:rgba(16,185,129,.15)">
+      <div class="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-2">Framework BDD.zig</div>
+      <div class="text-sm font-semibold text-gray-200 mb-2">Análise: Gherkin Comptime</div>
+      <ul class="text-xs text-gray-400 space-y-1 leading-relaxed">
+        <li><span class="text-emerald-400">✓</span> Parsing 100% em comptime (<code class="text-violet-300">@embedFile</code>)</li>
+        <li><span class="text-emerald-400">✓</span> Keywords: Feature, Rule, Background, Scenario, Outline, Template, Examples, Scenarios, And, But, *</li>
+        <li><span class="text-emerald-400">✓</span> Erros nativos Zig em <code class="text-violet-300">Then error X</code></li>
+        <li><span class="text-emerald-400">✓</span> Contexto tipado — sem reflection em runtime</li>
+        <li><span class="text-amber-400">⚠</span> Args limitados a <code class="text-violet-300">i32</code></li>
+        <li><span class="text-amber-400">⚠</span> Sem steps assíncronos</li>
+      </ul>
+      <a href="/bdd" class="inline-block mt-3 text-[11px] font-mono text-emerald-400 hover:text-emerald-300">Ver BDD Dashboard →</a>
+    </div>
+
+  </div>
+
+  <!-- SSE Live Terminal -->
+  <div class="glass rounded-2xl overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-3 border-b border-white/5">
+      <div class="flex items-center gap-3">
+        <div class="flex gap-1.5">
+          <span class="w-3 h-3 rounded-full bg-red-500/70"></span>
+          <span class="w-3 h-3 rounded-full bg-amber-500/70"></span>
+          <span class="w-3 h-3 rounded-full bg-emerald-500/70"></span>
+        </div>
+        <span class="text-xs font-mono text-gray-400">SSE Live Stream</span>
+        <span id="sseActiveLabel" class="text-xs font-mono text-gray-600"></span>
+      </div>
+      <button onclick="clearTerminal()" class="text-[11px] font-mono text-gray-500 hover:text-gray-300 transition-colors px-2 py-1 rounded hover:bg-white/5">clear</button>
+    </div>
+    <div id="terminal" class="terminal p-4 h-64 overflow-y-auto text-gray-500">
+      <span class="text-gray-600">— aguardando conexão SSE em localhost:7777 —</span>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const SUITES = ['stress','unit','bdd','synk','chaos'];
+let evtSource = null;
+let reconnectTimer = null;
+let isRunning = false;
+
+// ── Clock ──
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('pt-BR',{hour12:false});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── SSE ──
+function connectSSE() {
+  if (evtSource) { evtSource.close(); evtSource = null; }
+  evtSource = new EventSource('/sse');
+
+  evtSource.addEventListener('connected', e => {
+    const d = JSON.parse(e.data);
+    setSSEStatus(true);
+    document.getElementById('statClients').textContent = d.clients || 1;
+    if (d.active) setActive(d.active);
+    appendTerm(`[SSE] connected — clients: ${d.clients}`, 'start');
+  });
+
+  evtSource.addEventListener('test-start', e => {
+    const d = JSON.parse(e.data);
+    setActive(d.type);
+    isRunning = true;
+    appendTerm(`[START] ${d.type.toUpperCase()} — ${new Date(d.ts).toLocaleTimeString('pt-BR')}`, 'start');
+  });
+
+  evtSource.addEventListener('test-line', e => {
+    const d = JSON.parse(e.data);
+    const indent = {feature:'',rule:'  ',scenario:'    ',step:'      ',log:'  '}[d.kind] || '';
+    const kw = d.kind === 'step' ? d.keyword + ' ' : '';
+    appendTerm(indent + kw + (d.text || ''), d.kind);
+  });
+
+  evtSource.addEventListener('test-done', e => {
+    const d = JSON.parse(e.data);
+    isRunning = false;
+    setActive(null);
+    const ok = d.status === 'pass';
+    appendTerm(`[DONE] ${d.type}: ${d.passed} passed · ${d.failed} failed · ${d.duration_ms}ms`, ok ? 'done' : 'error');
+    loadResult(d.type);
+    if (d.type === 'bdd') document.getElementById('runBdd').disabled = false;
+  });
+
+  evtSource.addEventListener('test-error', e => {
+    const d = JSON.parse(e.data);
+    isRunning = false;
+    setActive(null);
+    appendTerm(`[ERROR] ${d.message}`, 'error');
+    document.getElementById('runBdd').disabled = false;
+  });
+
+  evtSource.onerror = () => {
+    setSSEStatus(false);
+    evtSource.close();
+    evtSource = null;
+    appendTerm('[SSE] disconnected — retrying in 3s…', 'warn');
+    reconnectTimer = setTimeout(connectSSE, 3000);
+  };
+}
+
+function setSSEStatus(ok) {
+  const dot = document.getElementById('sseDot');
+  const lbl = document.getElementById('sseLabel');
+  dot.className = 'sse-dot ' + (ok ? 'sse-live' : 'sse-off');
+  lbl.textContent = ok ? 'SSE: live' : 'SSE: disconnected';
+  lbl.className = ok ? 'text-emerald-400 text-xs font-mono' : 'text-gray-500 text-xs font-mono';
+}
+
+function setActive(type) {
+  const el = document.getElementById('statActive');
+  const lbl = document.getElementById('sseActiveLabel');
+  if (type) {
+    el.textContent = type.toUpperCase();
+    lbl.textContent = `· running ${type}`;
+  } else {
+    el.textContent = '—';
+    lbl.textContent = '';
+  }
+}
+
+// ── Terminal ──
+function appendTerm(text, kind) {
+  const t = document.getElementById('terminal');
+  const wasEmpty = t.children.length === 1 && t.firstChild.tagName !== 'DIV';
+  if (wasEmpty) t.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = `tl-${kind || 'log'}`;
+  div.textContent = text;
+  t.appendChild(div);
+  t.scrollTop = t.scrollHeight;
+}
+
+function clearTerminal() {
+  document.getElementById('terminal').innerHTML = '<span class="text-gray-700">— cleared —</span>';
+}
+
+// ── Results ──
+async function loadResult(type) {
+  try {
+    const r = await fetch(`/result/${type}`);
+    const d = await r.json();
+    updateCard(type, d);
+  } catch {}
+}
+
+function updateCard(type, result) {
+  const card = document.querySelector(`[data-suite="${type}"]`);
+  if (!card) return;
+  const dot = card.querySelector('.suite-status');
+  const res = card.querySelector('.suite-result');
+  const { status, passed, failed, total, duration_ms } = result;
+  if (status === 'pass') {
+    dot.className = 'suite-status w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981]';
+    res.className = 'suite-result text-xs text-emerald-400 font-mono';
+    res.textContent = `${passed}/${total} passed · ${duration_ms}ms`;
+  } else if (status === 'fail') {
+    dot.className = 'suite-status w-2 h-2 rounded-full bg-red-400 shadow-[0_0_6px_#f43f5e]';
+    res.className = 'suite-result text-xs text-red-400 font-mono';
+    res.textContent = `${failed} failed · ${duration_ms}ms`;
+  }
+}
+
+// ── Run ──
+async function runSuite(type) {
+  if (isRunning) { appendTerm('[WARN] Another test is running. Wait.', 'warn'); return; }
+  document.getElementById('runBdd').disabled = true;
+  appendTerm(`[RUN] Requesting ${type}...`, 'start');
+  try {
+    const r = await fetch(`/run/${type}`, { method: 'POST' });
+    if (!r.ok) {
+      const d = await r.json();
+      appendTerm(`[ERROR] ${d.error || d.message || 'Failed to start'}`, 'error');
+      document.getElementById('runBdd').disabled = false;
+    }
+  } catch (e) {
+    appendTerm(`[ERROR] Cannot reach server: ${e.message}`, 'error');
+    document.getElementById('runBdd').disabled = false;
+  }
+}
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded', () => {
+  connectSSE();
+  SUITES.forEach(loadResult);
+});
+</script>
+</body>
+</html>

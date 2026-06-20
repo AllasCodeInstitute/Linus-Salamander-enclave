@@ -1,0 +1,13 @@
+{
+  "id": "synk",
+  "name": "Sync & Concurrency",
+  "type": "synk",
+  "lang": ["zig", "rust"],
+  "color": "#6366f1",
+  "description": "8 thread-contention scenarios: NonceRegistry concurrent writes, seal/unseal races, AtomicBool init guard, BPF map contention",
+  "command": null,
+  "executable": false,
+  "threads": 64,
+  "scenarios": 8,
+  "binary": null
+}
