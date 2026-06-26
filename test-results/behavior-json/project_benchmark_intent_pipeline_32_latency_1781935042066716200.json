@@ -1,0 +1,18 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "project_benchmark_intent_pipeline_32_latency_1781935042066716200",
+  "category": "Project",
+  "test_kind": "benchmark",
+  "scope": "intent",
+  "name": "intent_pipeline_32_latency",
+  "status": "passed",
+  "duration_ns": 294365800,
+  "narrative": "Benchmarks the complete project-level Intent composition path.",
+  "metrics": [
+    { "name": "intents", "value": "32", "unit": "count" },
+    { "name": "avg_ns_per_intent", "value": "9198931", "unit": "ns" }
+  ],
+  "assertions": [
+    { "name": "intent benchmark completed", "passed": true }
+  ]
+}

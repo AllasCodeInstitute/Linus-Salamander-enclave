@@ -37,9 +37,8 @@ pub extern "C" fn init_enclave_keys() {
 #[cfg(test)]
 pub fn reset_enclave_for_tests() {
     ENCLAVE_INITIALIZED.store(false, std::sync::atomic::Ordering::SeqCst);
-    if let Ok(mut guard) = state().lock() {
-        guard.signing_key = Some(SigningKey::generate(&mut OsRng));
-        guard.replay_bitmap = [0; 1024];
-        OsRng.fill_bytes(&mut guard.root_seed);
-    }
+    let mut guard = state().lock().unwrap_or_else(|e| e.into_inner());
+    guard.signing_key = Some(SigningKey::generate(&mut OsRng));
+    guard.replay_bitmap = [0; 1024];
+    OsRng.fill_bytes(&mut guard.root_seed);
 }

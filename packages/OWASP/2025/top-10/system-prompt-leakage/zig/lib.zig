@@ -5,9 +5,7 @@ pub const replacement = "[REMOVED]";
 pub fn normalize_payload(allocator: std.mem.Allocator, payload: []const u8) ![]u8 {
     const no_nulls = try std.mem.replaceOwned(u8, allocator, payload, "\x00", "");
     defer allocator.free(no_nulls);
-    return std.mem.replaceOwned(u8, allocator, no_nulls, "
-", "
-");
+    return std.mem.replaceOwned(u8, allocator, no_nulls, "\r\n", "\n");
 }
 
 pub fn remove_blocked_patterns(allocator: std.mem.Allocator, normalized_payload: []const u8) ![]u8 {
@@ -23,7 +21,7 @@ pub fn remove_blocked_patterns(allocator: std.mem.Allocator, normalized_payload:
 pub fn escape_output(allocator: std.mem.Allocator, cleaned_payload: []const u8) ![]u8 {
     const subs = [_][2][]const u8{
         .{ "&", "&amp;" }, .{ "<", "&lt;" }, .{ ">", "&gt;" },
-        .{ "\"\", "&quot;" }, .{ "'", "&#39;" }, .{ "", "&#96;" },
+        .{ "\"", "&quot;" }, .{ "'", "&#39;" }, .{ "`", "&#96;" },
     };
     var out = try allocator.dupe(u8, cleaned_payload);
     for (subs) |sub| {

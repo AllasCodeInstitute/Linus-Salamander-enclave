@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "generate_agent_key_chaos_1781935226155254500",
+  "category": "QuarkBehaviors",
+  "function_name": "generate_agent_key",
+  "test_kind": "chaos",
+  "status": "passed",
+  "iterations": 8,
+  "wall_ns": 288700,
+  "executions_per_second": 27710.426048,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 0,
+  "ram_bytes_end": 0,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 0,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

@@ -293,7 +293,7 @@ Cada snapshot é protegido por um envelope de dois níveis:
 │  │                                                      │   │
 │  │  wrapped_dek = AES-256-GCM(                         │   │
 │  │      plaintext  = DEK,                               │   │
-│  │      key        = KEK  (de LSES_KEK env var),        │   │
+│  │      key        = KEK  (do blob selado — sealed_state),│   │
 │  │      nonce      = random 12 bytes,                   │   │
 │  │      aad        = canonical_aad  ← MESMO AAD!        │   │
 │  │  )                                                   │   │
@@ -435,10 +435,15 @@ No lado Rust, `zeroize::Zeroizing<[u8;32]>` é usado para o `root_seed` — ao s
 
 | Variável | Tipo | Descrição |
 |----------|------|-----------|
-| `LSES_KEK` | 64 hex chars | Chave de encriptação de chaves (KEK) — obrigatória |
-| `LSES_ENCLAVE_SEED` | 64 hex chars | Semente para derivar o par de chaves Ed25519 do Enclave |
-| `LSES_CONSUMER_SEED` | 64 hex chars | Semente para derivar o par de chaves Ed25519 do Consumer |
-| `LSES_TRUSTED_ENCLAVE_KEYS` | CSV de 64 hex chars | Chaves públicas de enclaves confiáveis |
+| `LSES_TRUSTED_ENCLAVE_KEYS` | CSV de 64 hex chars | Chaves públicas de enclaves confiáveis (não-secreta, segura para env) |
+| `LSES_STATE_DIR` | path | Diretório do blob selado — padrão: `~/.local/share/lses/` (não-secreta) |
+
+> **KEK, ENCLAVE_SEED e CONSUMER_SEED não existem como variáveis de ambiente.**
+> São gerados por `lses bootstrap` via CSPRNG do SO, selados em disco como blob
+> AES-256-GCM ligado à identidade desta máquina (`zig/sealed_state.zig`), e
+> carregados na memória do processo via `unsealKeys()`. O operador nunca vê os
+> valores — apenas a chave pública Ed25519 resultante para registrar em
+> `LSES_TRUSTED_ENCLAVE_KEYS`.
 
 ### Por que Seeds em vez de Chaves Geradas Aleatoriamente?
 
@@ -620,7 +625,7 @@ cargo deny check
 
 Mesmo que uma dependência (ex: `sha2`) seja comprometida por um supply chain attack:
 
-1. A dependência comprometida não tem acesso ao `LSES_KEK` (vem do ambiente, não do código)
+1. A dependência comprometida não tem acesso à KEK — ela nunca existe fora do blob selado em disco, inacessível a código de dependências em runtime
 2. A dependência comprometida não pode regenerar as chaves Ed25519 (fixas pelo `LSES_ENCLAVE_SEED`)
 3. Se a dependência enfraquecer o SHA-256, os hashes de snapshot mudariam — a verificação de `snapshot_id` falharia
 4. `deny.toml` detecta CVEs publicados antes que a dependência comprometida chegue à produção
@@ -633,7 +638,7 @@ Mesmo que uma dependência (ex: `sha2`) seja comprometida por um supply chain at
 |-----|-----------|-----------------|---------|
 | CVE-LSES-001 | Crítico | `root_seed = "SALAMANDER..."` — constante pública | `OsRng.fill_bytes(&mut root_seed)` |
 | CVE-LSES-002 | Crítico | `getrandom` com feature `"js"` em build nativo | `getrandom = { version = "0.2" }` |
-| CVE-LSES-003 | Crítico | KEK hardcoded no código-fonte | `LSES_KEK` env var, falha se ausente |
+| CVE-LSES-003 | Crítico | KEK hardcoded no código-fonte | Sealed state: KEK gerada por CSPRNG, selada em disco, nunca em env var |
 | CVE-LSES-004 | Crítico | `init_enclave_keys` resetava bitmap de replay | `AtomicBool ENCLAVE_INITIALIZED` |
 | CVE-LSES-005 | Alto | Secret demo triggava regra de detecção | Placeholder sem padrão sensível |
 | CVE-LSES-006 | Alto | `choreograph_packet`: XOR sem autenticação | Guarda de invariante + doc de contrato AEAD |

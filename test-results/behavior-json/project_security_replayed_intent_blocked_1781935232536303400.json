@@ -1,0 +1,17 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "project_security_replayed_intent_blocked_1781935232536303400",
+  "category": "Project",
+  "test_kind": "security",
+  "scope": "intent",
+  "name": "replayed_intent_blocked",
+  "status": "passed",
+  "duration_ns": 87800,
+  "narrative": "Verifies project-level Intent replay resistance.",
+  "metrics": [
+    { "name": "session_id", "value": "34000", "unit": "id" }
+  ],
+  "assertions": [
+    { "name": "replayed intent session is blocked", "passed": true }
+  ]
+}

@@ -13,18 +13,20 @@ pub fn normalize_payload(allocator: std.mem.Allocator, payload: []const u8) ![]u
     return std.mem.replaceOwned(u8, allocator, no_nulls, "\r\n", "\n");
 }
 
-// Zig 0.17: ArrayList is unmanaged — allocator passed per-call.
 pub fn extract_poetry_acrostic(allocator: std.mem.Allocator, normalized_payload: []const u8) ![]u8 {
-    var acrostic = std.ArrayList(u8){};
-    defer acrostic.deinit(allocator);
+    var count: usize = 0;
+    var scan = std.mem.splitScalar(u8, normalized_payload, '\n');
+    while (scan.next()) |line| {
+        if (std.mem.trimStart(u8, line, " \t").len > 0) count += 1;
+    }
+    const buf = try allocator.alloc(u8, count);
+    var idx: usize = 0;
     var lines = std.mem.splitScalar(u8, normalized_payload, '\n');
     while (lines.next()) |line| {
-        const trimmed = std.mem.trimLeft(u8, line, " \t");
-        if (trimmed.len > 0) {
-            try acrostic.append(allocator, std.ascii.toLower(trimmed[0]));
-        }
+        const trimmed = std.mem.trimStart(u8, line, " \t");
+        if (trimmed.len > 0) { buf[idx] = std.ascii.toLower(trimmed[0]); idx += 1; }
     }
-    return acrostic.toOwnedSlice(allocator);
+    return buf;
 }
 
 pub fn detect_poetry_prompt_injection(allocator: std.mem.Allocator, normalized_payload: []const u8) !bool {

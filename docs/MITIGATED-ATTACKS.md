@@ -104,11 +104,11 @@ Recursos lineares:  use(S)  = (result, ⊘)     ← S deixa de existir após uso
 #### Secret em Repositório Git
 **Ataque**: Commitar uma API key, senha, ou chave privada em repositório público ou privado.  
 **Mitigação direta**: `.gitignore` abrangente bloqueia `*.key`, `*.pem`, `*.seed`, `*.secret`, `.env*`, `*.sealed.json`.  
-**Mitigação sistêmica**: Secrets no LSES são sempre armazenados como envelopes AES-256-GCM com AAD que inclui contexto do projeto. Mesmo que o ciphertext seja exposto, ele é inútil sem o `LSES_KEK`.
+**Mitigação sistêmica**: Secrets no LSES são sempre armazenados como envelopes AES-256-GCM com AAD que inclui contexto do projeto. Mesmo que o ciphertext seja exposto, ele é inútil sem a KEK — que nunca existe fora do processo enclave.
 
 #### Secret Hardcoded
 **Ataque**: Developer deixa um valor hardcoded para teste e ele chega à produção.  
-**Mitigação**: `LSES_KEK` é carregado exclusivamente de variável de ambiente — se ausente, o processo falha com `error.MissingLsesKek`. Não existe valor padrão ou fallback.
+**Mitigação**: A KEK **não existe em nenhum lugar externo** — nem em variável de ambiente, nem em arquivo de configuração, nem em segredos de CI/CD. Ela é gerada via `bootstrap` com `std.crypto.random` (getrandom/RtlGenRandom), selada em disco como blob AES-256-GCM ligado à identidade da máquina (`zig/sealed_state.zig`), e carregada na memória do processo enclave via `unsealKeys()` a cada inicialização. O operador nunca vê o valor — a única saída do bootstrap é a chave pública Ed25519 para registro. Não existe valor padrão, fallback, nem caminho de env var.
 
 ---
 
@@ -142,7 +142,7 @@ Os ataques abaixo são incidentes reais ocorridos no npm e GitHub. Cada um é an
 - O LSES usa `deny.toml` com `unknown-git = "deny"` — dependências de repositórios git arbitrários são bloqueadas
 - Nenhum binário de build (autoconf, M4) é parte do codebase Zig — o build é determinístico via `build.zig`
 - `cargo deny check advisories` detecta CVEs publicados antes que a versão comprometida chegue ao deploy
-- As chaves de identidade do LSES são derivadas de seeds controladas pelo operador — um backdoor que tenta extrair `LSES_KEK` ainda precisaria produzir um envelope com AAD correto, epoch correto, e assinatura Ed25519 de um enclave registrado
+- As chaves de identidade do LSES são derivadas de seeds no blob selado — um backdoor que tenta extrair a KEK encontra apenas o blob cifrado em disco (AES-256-GCM + machine binding), e ainda precisaria produzir um envelope com AAD correto, epoch correto, e assinatura Ed25519 de um enclave registrado
 
 ### 2.4 Sequestro do `polyfill.io` (2024)
 
@@ -195,7 +195,7 @@ Os ataques abaixo são incidentes reais ocorridos no npm e GitHub. Cada um é an
 **Por que não funciona com LSES**:  
 - Tokens não ficam em variáveis de ambiente no modelo LAD
 - Handles opacas exfiltradas são inúteis sem o `RuntimeSecretStore` local
-- `LSES_KEK` é a única variável sensível presente — e ela não decripta secrets individuais sem também ter `LSES_ENCLAVE_SEED` e as assinaturas Ed25519 corretas
+- Nenhuma variável de ambiente sensível está presente — KEK/seeds vivem apenas no blob selado em disco, inacessível a scripts de instalação
 
 ### 2.10 GitHub Token Sprawl em `.env` Files Commitados
 
@@ -203,7 +203,7 @@ Os ataques abaixo são incidentes reais ocorridos no npm e GitHub. Cada um é an
 
 **Por que não funciona com LSES**:  
 - `.gitignore` abrangente: `.env`, `.env.*`, `.env.local`, `.env.production` são explicitamente ignorados
-- O valor presente no `.env` seria apenas `LSES_KEK` — o ciphertext dos secrets exigiria TAMBÉM as assinaturas Ed25519 válidas de um enclave registrado para ser útil
+- Nenhum valor sensível existe em `.env` — KEK/seeds nunca passam por variáveis de ambiente; o único valor em `.env` seria `LSES_TRUSTED_ENCLAVE_KEYS` (chave pública, não-secreta)
 
 ---
 

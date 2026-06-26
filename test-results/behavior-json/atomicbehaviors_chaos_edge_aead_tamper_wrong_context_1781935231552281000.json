@@ -1,0 +1,18 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "atomicbehaviors_chaos_edge_aead_tamper_wrong_context_1781935231552281000",
+  "category": "AtomicBehaviors",
+  "test_kind": "chaos",
+  "scope": "functionality",
+  "name": "edge_aead_tamper_wrong_context",
+  "status": "passed",
+  "duration_ns": 170000,
+  "narrative": "Injects ciphertext and AAD/context faults into the AEAD functionality.",
+  "metrics": [
+    { "name": "mutations", "value": "2", "unit": "count" }
+  ],
+  "assertions": [
+    { "name": "tampered ciphertext is rejected", "passed": true },
+    { "name": "wrong edge context is rejected", "passed": true }
+  ]
+}

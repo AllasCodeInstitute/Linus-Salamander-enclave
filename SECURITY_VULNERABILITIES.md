@@ -132,21 +132,30 @@ The Key Encryption Key (KEK), which protects the Data Encryption Key (DEK) insid
 
 This completely invalidates the envelope encryption model.
 
-**Fix — Load the KEK from a secure out-of-band source:**
+**Fix — Sealed state: KEK never exists outside the enclave process:**
 
 ```zig
-// zig/storage.zig — Load KEK from environment variable, never hardcode
-const kek_hex = std.process.getEnvVarOwned(allocator, "LSES_KEK") catch {
-    return error.MissingKekEnvVar;
-};
-defer allocator.free(kek_hex);
+// zig/storage.zig — KEK carregada do blob selado em disco, nunca de env var
+const sealed = try sealed_state.unsealKeys(allocator);
+var sk = sealed;
+defer sk.deinit(); // zera kek/seeds com secureZero após derivação
 
-var kek: [32]u8 = undefined;
-_ = try std.fmt.hexToBytes(&kek, kek_hex);
-// Provide via: export LSES_KEK=$(openssl rand -hex 32)
+// KEK copiada por valor para o provider; blob em disco permanece encriptado
+const kek_provider = crypto.LocalDevKekProvider.initFromBytes("lses-kek", sk.kek);
 ```
 
-For production: integrate with HashiCorp Vault Transit, AWS KMS, or Azure Key Vault as the KEK provider instead of `LocalDevKekProvider`.
+```zig
+// zig/sealed_state.zig — bootstrap gera e sela a KEK, nunca a expõe
+pub fn bootstrap(allocator: std.mem.Allocator) !void {
+    var kek: [32]u8 = undefined;
+    defer std.crypto.secureZero(u8, &kek);
+    std.crypto.random.bytes(&kek); // getrandom(2) / RtlGenRandom
+    try sealToDisk(allocator, &kek, ...); // AES-256-GCM + machine binding
+    // operador vê APENAS a chave pública Ed25519 — nunca a KEK
+}
+```
+
+A KEK não existe em variável de ambiente, arquivo de configuração, ou qualquer canal externo. O blob selado em disco é cifrado com uma chave derivada da identidade da máquina (machine-id + UID) — inútil em outra máquina mesmo que copiado. Para HSM/KMS em produção, substituir `LocalDevKekProvider` por um provider que delegue operações ao HSM sem exportar a chave.
 
 ---
 

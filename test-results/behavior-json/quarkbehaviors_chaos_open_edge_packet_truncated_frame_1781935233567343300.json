@@ -1,0 +1,17 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "quarkbehaviors_chaos_open_edge_packet_truncated_frame_1781935233567343300",
+  "category": "QuarkBehaviors",
+  "test_kind": "chaos",
+  "scope": "function",
+  "name": "open_edge_packet_truncated_frame",
+  "status": "passed",
+  "duration_ns": 6200,
+  "narrative": "Injects malformed frame length into the open function.",
+  "metrics": [
+    { "name": "frame_len", "value": "27", "unit": "bytes" }
+  ],
+  "assertions": [
+    { "name": "truncated frame is rejected", "passed": true }
+  ]
+}

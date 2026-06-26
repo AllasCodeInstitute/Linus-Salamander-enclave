@@ -445,7 +445,7 @@ import ctypes
 import lses  # wrapper Python para a C ABI
 
 # bootstrap/app.py — inicialização única
-lses_client = lses.Client()  # carrega LSES_KEK, LSES_ENCLAVE_SEED do ambiente
+lses_client = lses.Client()  # carrega material de chave do estado selado em disco
 
 # controllers/payment_controller.py
 class PaymentController:
@@ -522,14 +522,15 @@ Em arquiteturas de microserviços com service mesh (Istio, Linkerd), cada servi�
 ```
              ┌──────────────────────────────────────────────┐
              │              Operador                         │
-             │  gera LSES_ENCLAVE_SEED por serviço          │
-             │  coleta chaves públicas no primeiro boot      │
+             │  executa `lses bootstrap` por serviço         │
+             │  coleta chave pública Ed25519 no primeiro boot│
              │  configura LSES_TRUSTED_ENCLAVE_KEYS          │
              └──────────────────────┬───────────────────────┘
                                     │ configura (fora de banda)
      ┌──────────────────────────────▼──────────────────────────────────┐
      │                      Config Service                               │
-     │   (Vault, Kubernetes Secrets, AWS SSM — apenas para LSES_KEK)   │
+     │   (Vault, K8s Secrets, AWS SSM — apenas LSES_TRUSTED_ENCLAVE_KEYS│
+     │    KEK/seeds vivem no blob selado em disco, nunca aqui)          │
      └──────┬───────────────────────┬──────────────────────────────────┘
             │                       │
      ┌──────▼──────┐         ┌──────▼──────┐
@@ -542,9 +543,9 @@ Em arquiteturas de microserviços com service mesh (Istio, Linkerd), cada servi�
 
 ### Identidade por Serviço
 
-Cada microserviço tem seu próprio `LSES_ENCLAVE_SEED` e `LSES_CONSUMER_SEED`. Isso garante que:
+Cada microserviço executa `lses bootstrap` uma vez no provisionamento — gera seu próprio blob selado com KEK, ENCLAVE_SEED e CONSUMER_SEED exclusivos. Isso garante que:
 
-1. Um segredo do Serviço A não pode ser lido pelo Serviço B (chaves diferentes)
+1. Um segredo do Serviço A não pode ser lido pelo Serviço B (chaves diferentes por blob)
 2. Um enclave comprometido do Serviço A não pode impersonar o Serviço B
 
 ```yaml
@@ -556,29 +557,28 @@ metadata:
 spec:
   template:
     spec:
+      initContainers:
+      - name: lses-bootstrap
+        # Executa uma vez se blob não existir; gera KEK+seeds via CSPRNG,
+        # sela em disco — nenhum valor secreto passa por env var
+        command: ["lses", "bootstrap", "--if-not-exists"]
+        volumeMounts:
+        - name: lses-state
+          mountPath: /var/lib/lses
       containers:
       - name: payment-service
         env:
-        - name: LSES_KEK
+        - name: LSES_STATE_DIR        # não-secreta — só a localização do blob
+          value: /var/lib/lses
+        - name: LSES_TRUSTED_ENCLAVE_KEYS   # não-secreta — chaves públicas
           valueFrom:
-            secretKeyRef:
-              name: lses-kek         # Kubernetes Secret (gerenciado separadamente)
-              key: kek
-        - name: LSES_ENCLAVE_SEED
-          valueFrom:
-            secretKeyRef:
-              name: lses-payment-identity
-              key: enclave_seed
-        - name: LSES_CONSUMER_SEED
-          valueFrom:
-            secretKeyRef:
-              name: lses-payment-identity
-              key: consumer_seed
-        - name: LSES_TRUSTED_ENCLAVE_KEYS
-          valueFrom:
-            secretKeyRef:
-              name: lses-payment-identity
-              key: trusted_enclave_keys
+            configMapKeyRef:
+              name: lses-trusted-keys
+              key: enclave_keys
+      volumes:
+      - name: lses-state
+        persistentVolumeClaim:
+          claimName: lses-state-payment
 ```
 
 ### Comunicação entre Serviços
@@ -625,11 +625,11 @@ Em funções serverless (AWS Lambda, Google Cloud Functions, Azure Functions), o
 ### Desafio do Cold Start
 
 ```
-Cold Start:          Warm (reutilização):
-init_enclave_keys()  [já inicializado - AtomicBool]
-read LSES_KEK        [já em cache]
-load seeds           [chaves já carregadas]
-handle request       handle request
+Cold Start:             Warm (reutilização):
+init_enclave_keys()     [já inicializado - AtomicBool]
+unsealKeys() do disco   [KEK/seeds já carregados]
+derivar Ed25519 keys    [chaves já em memória]
+handle request          handle request
 ```
 
 O `AtomicBool ENCLAVE_INITIALIZED` garante que `init_enclave_keys()` execute apenas uma vez por processo — inclusive em warm starts.
@@ -643,9 +643,9 @@ use std::sync::OnceLock;
 static LSES: OnceLock<LsesClient> = OnceLock::new();
 
 async fn init_lses() -> LsesClient {
-    // Carrega seeds do ambiente (Lambda env vars)
-    let kek = std::env::var("LSES_KEK").expect("LSES_KEK obrigatório");
-    LsesClient::new(&kek).expect("Falha ao inicializar LSES")
+    // Carrega material de chave do blob selado em disco (via unsealKeys)
+    // LSES_STATE_DIR aponta para o volume com o blob — não é um segredo
+    LsesClient::new().expect("Falha ao inicializar LSES: execute lses bootstrap primeiro")
 }
 
 #[tokio::main]
@@ -814,21 +814,16 @@ Em qualquer arquitetura, a inicialização segue o mesmo padrão:
 ```go
 // bootstrap/lses.go
 func InitLSES() (*lses.Client, error) {
-    // 1. Verificar presença das variáveis obrigatórias
-    requiredVars := []string{"LSES_KEK", "LSES_ENCLAVE_SEED", "LSES_CONSUMER_SEED"}
-    for _, v := range requiredVars {
-        if os.Getenv(v) == "" {
-            return nil, fmt.Errorf("variável de ambiente obrigatória ausente: %s", v)
-        }
-    }
-
-    // 2. Inicializar o enclave — fail-closed se LSES_KEK inválida
+    // 1. Inicializar o enclave — carrega KEK/seeds do blob selado em disco
+    //    Falha com SealedStateNotFound se bootstrap ainda não foi executado.
+    //    Nenhuma variável de ambiente de segredo é necessária ou aceita.
     client, err := lses.NewClient()
     if err != nil {
-        return nil, fmt.Errorf("falha ao inicializar enclave LSES: %w", err)
+        return nil, fmt.Errorf("falha ao inicializar enclave LSES: %w\n"+
+            "Execute 'lses bootstrap' para gerar o estado selado.", err)
     }
 
-    // 3. Verificar conectividade básica (não expõe nenhum secret)
+    // 2. Verificar conectividade básica (não expõe nenhum secret)
     if err := client.HealthCheck(); err != nil {
         return nil, fmt.Errorf("enclave LSES indisponível: %w", err)
     }
@@ -960,11 +955,11 @@ for i := 0; i < numWorkers; i++ {
 
 ```bash
 # ❌ ERRADO — sem keys configuradas, qualquer enclave é aceito
-export LSES_KEK="..."
-# (sem LSES_TRUSTED_ENCLAVE_KEYS)
+# (sem LSES_TRUSTED_ENCLAVE_KEYS — LSES_KEK não existe como env var)
 
-# ✓ CORRETO — pin das chaves públicas conhecidas
+# ✓ CORRETO — pin das chaves públicas conhecidas (não-secretas)
 export LSES_TRUSTED_ENCLAVE_KEYS="9f2a8b...,3c4d5e..."
+# A chave pública é impressa pelo 'lses bootstrap' no primeiro boot
 ```
 
 Sem `LSES_TRUSTED_ENCLAVE_KEYS`, um enclave malicioso com chaves novas pode ser aceito. A variável é opcional para desenvolvimento mas **obrigatória em produção**.

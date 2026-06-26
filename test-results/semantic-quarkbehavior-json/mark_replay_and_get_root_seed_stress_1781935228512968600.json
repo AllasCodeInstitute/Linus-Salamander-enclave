@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "mark_replay_and_get_root_seed_stress_1781935228512968600",
+  "category": "QuarkBehaviors",
+  "function_name": "mark_replay_and_get_root_seed",
+  "test_kind": "stress",
+  "status": "passed",
+  "iterations": 64,
+  "wall_ns": 455600,
+  "executions_per_second": 140474.100088,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 0,
+  "ram_bytes_end": 0,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 0,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

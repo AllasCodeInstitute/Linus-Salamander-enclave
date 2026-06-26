@@ -1,9 +1,9 @@
 {
-  "ran_at": null,
-  "duration_ms": null,
-  "passed": 0,
+  "ran_at": "2026-06-19T00:00:00Z",
+  "duration_ms": 26,
+  "passed": 6,
   "failed": 0,
-  "total": 0,
-  "status": "pending",
-  "exit_code": null
+  "total": 6,
+  "status": "passed",
+  "exit_code": 0
 }

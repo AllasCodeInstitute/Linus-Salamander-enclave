@@ -47,7 +47,7 @@ pub const PrimordialSoup = struct {
     max_jitter: u64,
 
     pub fn init(allocator: std.mem.Allocator, capacity: usize) !PrimordialSoup {
-        var packets = std.ArrayList([]const u8){};
+        var packets = std.ArrayList([]const u8).empty;
         try packets.ensureTotalCapacity(allocator, capacity);
         return .{
             .allocator = allocator,

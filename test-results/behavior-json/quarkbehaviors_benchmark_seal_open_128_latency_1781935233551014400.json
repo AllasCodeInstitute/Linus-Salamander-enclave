@@ -1,0 +1,18 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "quarkbehaviors_benchmark_seal_open_128_latency_1781935233551014400",
+  "category": "QuarkBehaviors",
+  "test_kind": "benchmark",
+  "scope": "function",
+  "name": "seal_open_128_latency",
+  "status": "passed",
+  "duration_ns": 8564100,
+  "narrative": "Measures a lightweight in-test function-level seal/open roundtrip benchmark.",
+  "metrics": [
+    { "name": "iterations", "value": "128", "unit": "count" },
+    { "name": "avg_ns_per_roundtrip", "value": "66907", "unit": "ns" }
+  ],
+  "assertions": [
+    { "name": "benchmark loop completed", "passed": true }
+  ]
+}

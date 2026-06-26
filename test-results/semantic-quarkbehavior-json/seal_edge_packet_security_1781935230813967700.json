@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "seal_edge_packet_security_1781935230813967700",
+  "category": "QuarkBehaviors",
+  "function_name": "seal_edge_packet",
+  "test_kind": "security",
+  "status": "passed",
+  "iterations": 8,
+  "wall_ns": 485700,
+  "executions_per_second": 16471.072679,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 0,
+  "ram_bytes_end": 0,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 0,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

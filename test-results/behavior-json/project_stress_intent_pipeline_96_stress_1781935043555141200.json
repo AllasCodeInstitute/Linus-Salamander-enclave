@@ -1,0 +1,18 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "project_stress_intent_pipeline_96_stress_1781935043555141200",
+  "category": "Project",
+  "test_kind": "stress",
+  "scope": "intent",
+  "name": "intent_pipeline_96_stress",
+  "status": "passed",
+  "duration_ns": 917585100,
+  "narrative": "Stresses complete Intent composition under repeated enclave operations.",
+  "metrics": [
+    { "name": "intents", "value": "96", "unit": "count" },
+    { "name": "signed_bytes", "value": "6144", "unit": "bytes" }
+  ],
+  "assertions": [
+    { "name": "stress intents emitted signatures", "passed": true }
+  ]
+}

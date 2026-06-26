@@ -1,0 +1,17 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "project_chaos_tampered_intent_blocked_1781935042152520900",
+  "category": "Project",
+  "test_kind": "chaos",
+  "scope": "intent",
+  "name": "tampered_intent_blocked",
+  "status": "passed",
+  "duration_ns": 73400,
+  "narrative": "Injects a corrupted tag into a project-level Intent envelope.",
+  "metrics": [
+    { "name": "tampered_bytes", "value": "1", "unit": "count" }
+  ],
+  "assertions": [
+    { "name": "tampered intent frame is blocked", "passed": true }
+  ]
+}

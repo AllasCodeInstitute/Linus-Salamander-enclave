@@ -1,0 +1,18 @@
+{
+  "schema": "lses.semantic.quarkbehavior.result.v1",
+  "id": "choreograph_packet_load_1781935028693763300",
+  "category": "QuarkBehaviors",
+  "function_name": "choreograph_packet",
+  "test_kind": "load",
+  "status": "passed",
+  "iterations": 16,
+  "wall_ns": 44338600,
+  "executions_per_second": 360.859387,
+  "cpu_seconds_total": 0.000000000,
+  "cpu_seconds_per_execution": 0.000000000000,
+  "ram_bytes_start": 0,
+  "ram_bytes_end": 0,
+  "ram_bytes_per_execution": 0,
+  "ram_bytes_max": 0,
+  "assertions": [{ "name": "modular function behavior completed", "passed": true }]
+}

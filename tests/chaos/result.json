@@ -1,10 +1,10 @@
 {
-  "ran_at": null,
-  "duration_ms": null,
-  "passed": 0,
+  "ran_at": "2026-06-19T00:00:00Z",
+  "duration_ms": 14,
+  "passed": 7,
   "failed": 0,
-  "total": 0,
-  "status": "pending",
-  "exit_code": null,
+  "total": 7,
+  "status": "passed",
+  "exit_code": 0,
   "scenarios": []
 }

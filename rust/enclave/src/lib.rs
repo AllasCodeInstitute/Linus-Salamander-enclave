@@ -889,17 +889,24 @@ mod tests {
         let _guard = TEST_LOCK.lock().unwrap();
         init_enclave_keys();
         let started = Instant::now();
+        let mut sk_seed = [0u8; 32];
+        OsRng.fill_bytes(&mut sk_seed);
+        let signing_key = SigningKey::from_bytes(&sk_seed);
         let identity = TripartiteIdentity {
-            pub_key: [7u8; 32],
+            pub_key: signing_key.verifying_key().to_bytes(),
             mac_addr: [1, 2, 3, 4, 5, 6],
             ip_addr: [10, 0, 0, 9],
         };
-        let mut hasher = Sha256::new();
-        hasher.update(identity.pub_key);
-        hasher.update(identity.mac_addr);
-        hasher.update(identity.ip_addr);
-        let expected = hasher.finalize();
-        let identity_status = verify_tripartite_identity(&identity, expected.as_ptr());
+        let mut challenge = [0u8; 32];
+        OsRng.fill_bytes(&mut challenge);
+        let mut signing_input = Vec::with_capacity(22 + 32 + 32 + 6 + 4);
+        signing_input.extend_from_slice(b"LSES-IDENTITY-PROOF-V1");
+        signing_input.extend_from_slice(&challenge);
+        signing_input.extend_from_slice(&identity.pub_key);
+        signing_input.extend_from_slice(&identity.mac_addr);
+        signing_input.extend_from_slice(&identity.ip_addr);
+        let resp_sig = signing_key.sign(&signing_input).to_bytes();
+        let identity_status = verify_tripartite_identity(&identity, challenge.as_ptr(), resp_sig.as_ptr());
         let frame = seal_packet(&edge(), 21_001, b"signed-envelope");
         let sig = sign_payload(21_002, &frame);
         let assertions = [
@@ -1607,14 +1614,15 @@ mod modular_quarkbehavior_tests {
             "state" => state().lock().is_ok(),
             "init_pqc_session" => {
                 let mut out = [0u8; 1184];
-                init_pqc_session(session_seed(function_name, iteration), out.as_mut_ptr()) == 0
-                    && out[0] == 0xAA
+                // CVE-LSES-007: stub returns ERR_NOT_IMPLEMENTED until ML-KEM-768 is integrated
+                init_pqc_session(session_seed(function_name, iteration), out.as_mut_ptr()) == -10
             }
             "verify_pqc_handshake" => {
                 let mut out = [0u8; 1184];
                 let sid = session_seed(function_name, iteration);
-                init_pqc_session(sid, out.as_mut_ptr()) == 0
-                    && verify_pqc_handshake(sid, core::ptr::null()) == 0
+                // CVE-LSES-007: both PQC stubs return ERR_NOT_IMPLEMENTED
+                init_pqc_session(sid, out.as_mut_ptr()) == -10
+                    && verify_pqc_handshake(sid, core::ptr::null()) == -10
             }
             "init_enclave_keys" => {
                 init_enclave_keys();
@@ -1637,17 +1645,24 @@ mod modular_quarkbehavior_tests {
                     && out.iter().any(|byte| *byte != 0)
             }
             "verify_tripartite_identity" => {
+                let mut sk_seed = [0u8; 32];
+                OsRng.fill_bytes(&mut sk_seed);
+                let sk = SigningKey::from_bytes(&sk_seed);
                 let id = TripartiteIdentity {
-                    pub_key: [iteration as u8; 32],
+                    pub_key: sk.verifying_key().to_bytes(),
                     mac_addr: [1, 2, 3, 4, 5, 6],
                     ip_addr: [127, 0, 0, 1],
                 };
-                let mut hasher = Sha256::new();
-                hasher.update(id.pub_key);
-                hasher.update(id.mac_addr);
-                hasher.update(id.ip_addr);
-                let expected = hasher.finalize();
-                verify_tripartite_identity(&id, expected.as_ptr()) == 0
+                let mut challenge = [0u8; 32];
+                OsRng.fill_bytes(&mut challenge);
+                let mut signing_input = Vec::with_capacity(22 + 32 + 32 + 6 + 4);
+                signing_input.extend_from_slice(b"LSES-IDENTITY-PROOF-V1");
+                signing_input.extend_from_slice(&challenge);
+                signing_input.extend_from_slice(&id.pub_key);
+                signing_input.extend_from_slice(&id.mac_addr);
+                signing_input.extend_from_slice(&id.ip_addr);
+                let resp_sig = sk.sign(&signing_input).to_bytes();
+                verify_tripartite_identity(&id, challenge.as_ptr(), resp_sig.as_ptr()) == 0
             }
             "derive_edge_key" => derive_edge_key(&sample_edge(), &ROOT_SEED_DEFAULT)
                 .iter()
@@ -1759,7 +1774,7 @@ mod modular_quarkbehavior_tests {
     }
 
     fn run_modular_behavior_case(function_name: &str, kind: &str) {
-        let _guard = MODULAR_TEST_LOCK.lock().unwrap();
+        let _guard = MODULAR_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         init_enclave_keys();
         let iterations = match kind {
             "load" => 16,

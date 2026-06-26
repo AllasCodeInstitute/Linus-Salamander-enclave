@@ -18,7 +18,7 @@ pub const PendingProofGate = struct {
     pub fn init(allocator: std.mem.Allocator) PendingProofGate {
         return .{
             .allocator = allocator,
-            .items = std.ArrayList(Message){},
+            .items = std.ArrayList(Message).empty,
         };
     }
 

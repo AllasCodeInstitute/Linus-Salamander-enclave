@@ -1,0 +1,18 @@
+{
+  "schema": "lses.behavior.result.v1",
+  "id": "atomicbehaviors_benchmark_edge_pipeline_64_latency_1781935041624061300",
+  "category": "AtomicBehaviors",
+  "test_kind": "benchmark",
+  "scope": "functionality",
+  "name": "edge_pipeline_64_latency",
+  "status": "passed",
+  "duration_ns": 614345700,
+  "narrative": "Benchmarks the atomic envelope plus signing functionality path.",
+  "metrics": [
+    { "name": "pipelines", "value": "64", "unit": "count" },
+    { "name": "avg_ns_per_pipeline", "value": "9599151", "unit": "ns" }
+  ],
+  "assertions": [
+    { "name": "feature pipeline completed", "passed": true }
+  ]
+}
